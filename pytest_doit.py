@@ -326,8 +326,6 @@ class DoitOutdated(object):
         """
         if call.when == 'call':
             if getattr(call,'result',None) == []:
-                # FIXME: need to check if all test were executed
-                # in case -k is used
                 self.success.add(item.location[0])
             else:
                 self.fail.add(item.location[0])
@@ -335,4 +333,7 @@ class DoitOutdated(object):
 
     def pytest_sessionfinish(self, session):
         """save success in doit"""
-        self.set_success(list(self.success - self.fail))
+        # FIXME: need to check if all test were executed
+        # in case -k is used. by now just consider not all were executed.
+        if not getattr(session.config.option, 'keyword', None):
+            self.set_success(list(self.success - self.fail))
