@@ -189,6 +189,7 @@ def constants(py_files, test_files):
 
 ##################### end doit section
 
+import glob
 import pytest
 
 def pytest_addoption(parser):
@@ -196,6 +197,9 @@ def pytest_addoption(parser):
     group.addoption('--outdated', action="store_true", dest="outdated_only",
             default=False,
             help="execute only outdated tests (based on modified files)")
+    group._addoption('--watch-pkg',
+        action="append", dest="watch_pkg", default=[],
+        help="(doit plugin) watch for file changes in these packages")
 
 def pytest_configure(config):
     if config.option.outdated_only:
@@ -268,13 +272,17 @@ class DoitOutdated(object):
 
 
     def pytest_sessionstart(self, session):
+        self.pkg_folders = session.config.option.watch_pkg
         if self.pkg_folders:
-            pass # XXX FIXME
-        else:
-            if not (len(session.config.args) == 1 and
+            for pkg in self.pkg_folders:
+                pkg_glob = os.path.join(pkg, "*.py")
+                self.py_files.extend(glob.glob(pkg_glob))
+            return
+        if not (len(session.config.args) == 1 and
                 session.config.args[0] == os.getcwd()):
-                msg = "doit plugin. please configure xxx"
-                raise pytest.UsageError(msg)
+            msg = ("(plugin-doit) You are required to setup --watch-pkg"
+                   " in order to use the plugin together with -k.")
+            raise pytest.UsageError(msg)
 
 
     def pytest_collect_file(self, path, parent):
