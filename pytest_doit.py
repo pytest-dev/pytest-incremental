@@ -101,7 +101,7 @@ class ModuleSet(object):
 def get_dep(module_path):
     mod = PY_MODS.by_path(module_path)
     mod.get_imports()
-    return {'file_dep': [dep for dep in mod.imports]}
+    return {'file_dep': [dep for dep in mod.imports if dep in PY_FILES]}
 def task_get_dep():
     """get direct dependencies for each module"""
     for mod in PY_FILES:
@@ -175,9 +175,12 @@ PY_MODS = []
 
 def constants(py_files, test_files):
     global PY_MODS
-    PY_FILES[:] = py_files
+    PY_FILES[:] = list(set(py_files + test_files))
     TEST_FILES[:] = test_files
-    PACKAGES[:] = list(set((os.path.split(p)[0] for p in py_files)))
+    # TODO all tasks should depend on the value of PACKAGES
+    PACKAGES[:] = (list(set((os.path.split(p)[0] for p in py_files))) +
+                   list(set((os.path.split(p)[0] for p in test_files)))
+                   )
     PY_MODS = ModuleSet(PACKAGES, PY_FILES)
 
 
