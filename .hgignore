@@ -1,0 +1,7 @@
+syntax:glob
+
+*.pyc
+*.doit.db
+*.egg-info
+dist
+
