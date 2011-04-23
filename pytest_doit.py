@@ -325,7 +325,10 @@ class DoitOutdated(object):
         should be marked as successful in doit
         """
         if call.when == 'call':
-            if getattr(call,'result',None) == []:
+            failures = getattr(call, 'result', None)
+            # successful: call.result == []
+            # skipped, xfail: call doesnt have result attribute
+            if not failures:
                 self.success.add(item.location[0])
             else:
                 self.fail.add(item.location[0])
