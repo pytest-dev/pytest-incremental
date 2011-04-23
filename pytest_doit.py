@@ -10,14 +10,14 @@ from doit.cmds import doit_run
 
 ############# find imports using AST
 
-def file2ast(file_name):
+def _file2ast(file_name):
     """get ast-tree from file_name"""
     fp = open(file_name, 'r')
     text = fp.read()
     fp.close()
     return ast.parse(text, file_name)
 
-class ImportsFinder(ast.NodeVisitor):
+class _ImportsFinder(ast.NodeVisitor):
     """find all imports
     @ivar imports: (list - tuple) (module, name, asname, level)
     """
@@ -38,25 +38,66 @@ class ImportsFinder(ast.NodeVisitor):
         ast.NodeVisitor.generic_visit(self, node)
 
 def find_imports(file_path):
-    mod_ast = file2ast(file_path)
-    finder = ImportsFinder()
+    """get list of import from python module
+    @return: (list - tuple) (module, name, asname, level)
+    """
+    mod_ast = _file2ast(file_path)
+    finder = _ImportsFinder()
     finder.visit(mod_ast)
     return finder.imports
 
+
 ############## process module imports
 
-class _PyMod(object):
-    def __init__(self, module_set, path):
-        self._set = module_set
+class _PyModule(object):
+    """Represents a python module. Can find imported modules
+    """
+    def __init__(self, module_set, path, top=None):
+        """
+        @param module_set (ModuleSet)
+        """
+        self.module_set = module_set
         self.path = path
         self.name = self.path2name(path)
         self.imports = None # list of module names
+        self.pkg = self.is_pkg(path)
+        self.top = top or self.get_top_namespace(path)
+
+    @staticmethod
+    def is_pkg(path):
+        return (os.path.isdir(path) and
+                os.path.exists(os.path.join(path, '__init__.py')))
+
+    @classmethod
+    def get_top_namespace(cls, path):
+        """get top package or module name"""
+        print "n:", path
+        current_path = os.path.basename(path)
+        if current_path.endswith('.py'):
+            current_path = current_path[:-3]
+        parent_path = os.path.dirname(path)
+        while True:
+            print "-> %s + %s" % (parent_path, current_path)
+            if not cls.is_pkg(parent_path):
+                return current_path
+            current_path = os.path.basename(parent_path)
+            parent_path = os.path.dirname(current_path)
+
     @staticmethod
     def path2name(path):
+        """convert file path to module dot-separated module name"""
+        assert path.endswith('.py')
         return path[:-3].replace('/', '.')
-    def get_imports(self):
+
+    def _add_import(self, module):
+        """add another module as import
+        @param module: (_PyModule)
+        """
+        self.imports.add(module.path)
+
+    def set_imports(self):
         """set imports from module
-        must be called after all PyMod objects have been created
+        must be called after all PyModule objects have been created
         """
         self.imports = set()
         raw_imports = find_imports(self.path)
@@ -64,35 +105,61 @@ class _PyMod(object):
             # join 'from' and 'import' part of import statement
             full = ".".join(s for s in x[:2] if s is not None)
 
-            # get top part of import and remove imports to external modules
-            top = full.split('.')[0]
-            if top not in self._set.packages:
+            # TODO: if levels
+
+            # get first part of import and remove imports to external modules
+            first = full.split('.')[0]
+            if first not in self.module_set.top:
+                continue
+
+            # if imported module on module_set add to list
+            imp_mod = self.module_set.modules.get(full)
+            if imp_mod:
+                self._add_import(imp_mod)
                 continue
 
             # last part of import section might not be a module
-            imp_mod = self._set.modules.get(full)
-            if imp_mod:
-                self.imports.add(imp_mod.path)
-                continue
             # remove last section
             only = full.rsplit('.', 1)[0]
-            imp_mod = self._set.modules.get(only)
-            if imp_mod:
-                self.imports.add(imp_mod.path)
-            elif only == top:
-                self.imports.add(only + "/__init__.py")
+            imp_mod2 = self.module_set.modules.get(only)
+            if imp_mod2:
+                self._add_import(imp_mod2)
+                continue
+
+            # special case for __init__
+            if full in self.module_set.pkgs:
+                pkg_name = full  + ".__init__"
+                self._add_import(self.module_set.modules[pkg_name])
+                continue
+
+            if only in self.module_set.pkgs:
+                pkg_name = only +  ".__init__"
+                self._add_import(self.module_set.modules[pkg_name])
+                continue
+
+            assert False
+
 
 class ModuleSet(object):
     """helper to filter import list only from within packages"""
-    def __init__(self, packages, path_list):
-        self.packages = packages # list of packages to collect imports
+    def __init__(self, path_list):
+        # top packages/modules to match imports
+        self.top = set()
+        self.pkgs = set()
         self.modules = {} # key by path
+
         for path in path_list:
-            mod = _PyMod(self, path)
+            # create modules object
+            mod = _PyModule(self, path)
+            # get top package/module
+            self.top.add(mod.top)
+            if mod.name.endswith('.__init__'):
+                self.pkgs.add(mod.name[:-9]) # 9 == len('.__init__')
             self.modules[mod.name] = mod
 
+
     def by_path(self, path):
-        name = _PyMod.path2name(path)
+        name = _PyModule.path2name(path)
         return self.modules.get(name, None)
 
 
@@ -100,7 +167,7 @@ class ModuleSet(object):
 
 def get_dep(module_path):
     mod = PY_MODS.by_path(module_path)
-    mod.get_imports()
+    mod.set_imports()
     return {'file_dep': [dep for dep in mod.imports if dep in PY_FILES]}
 def task_get_dep():
     """get direct dependencies for each module"""
@@ -170,18 +237,13 @@ DOIT_CONFIG = {'continue': True,
 
 TEST_FILES = []
 PY_FILES = []
-PACKAGES = []
 PY_MODS = []
 
 def constants(py_files, test_files):
     global PY_MODS
     PY_FILES[:] = list(set(py_files + test_files))
     TEST_FILES[:] = test_files
-    # TODO all tasks should depend on the value of PACKAGES
-    PACKAGES[:] = (list(set((os.path.split(p)[0] for p in py_files))) +
-                   list(set((os.path.split(p)[0] for p in test_files)))
-                   )
-    PY_MODS = ModuleSet(PACKAGES, PY_FILES)
+    PY_MODS = ModuleSet(PY_FILES)
 
 
 # for manual testing
@@ -276,8 +338,10 @@ class DoitOutdated(object):
 
     def pytest_sessionstart(self, session):
         self.pkg_folders = session.config.option.watch_pkg
+        # TODO all tasks should depend on the value of PACKAGES
         if self.pkg_folders:
             for pkg in self.pkg_folders:
+                # FIXME this must be recursive to find sub-packages
                 pkg_glob = os.path.join(pkg, "*.py")
                 self.py_files.extend(glob.glob(pkg_glob))
             return
