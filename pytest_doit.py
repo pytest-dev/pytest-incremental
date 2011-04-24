@@ -65,7 +65,9 @@ class _PyModule(object):
 
     @classmethod
     def get_namespace(cls, path):
-        """get package or module full name"""
+        """get package or module full name
+        @return list of names
+        """
         name_list = []
         current_path = os.path.basename(path)
         if current_path.endswith('.py'):
@@ -85,15 +87,13 @@ class _PyModule(object):
         """
         self.imports.add(module.path)
 
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return "<_PyModule %s>" % self.path
 
 
 class ModuleSet(object):
     """helper to filter import list only from within packages"""
     def __init__(self, path_list):
-        # top packages/modules to match imports
-        self.top = set()
         self.pkgs = set()
         self.by_path = {} # module by path
         self.by_name = {} # module by name (dot separated)
@@ -101,12 +101,33 @@ class ModuleSet(object):
         for path in path_list:
             # create modules object
             mod = _PyModule(path)
-            # get top package/module
-            self.top.add(mod.name[0])
             if mod.name[-1] == '__init__':
                 self.pkgs.add('.'.join(mod.name[:-1]))
             self.by_path[path] = mod
             self.by_name['.'.join(mod.name)] = mod
+
+
+    def _get_imported_module(self, module_name):
+        """try to get imported module reference by its name"""
+        # if imported module on module_set add to list
+        imp_mod = self.by_name.get(module_name)
+        if imp_mod:
+            return imp_mod
+
+        # last part of import section might not be a module
+        # remove last section
+        only = module_name.rsplit('.', 1)[0]
+        imp_mod2 = self.by_name.get(only)
+        if imp_mod2:
+            return imp_mod2
+
+        # special case for __init__
+        if module_name in self.pkgs:
+            pkg_name = module_name  + ".__init__"
+            return self.by_name[pkg_name]
+        if only in self.pkgs:
+            pkg_name = only +  ".__init__"
+            return self.by_name[pkg_name]
 
 
     def set_imports(self, module):
@@ -119,37 +140,17 @@ class ModuleSet(object):
 
             # TODO: if levels
 
-            # get first part of import and remove imports to external modules
-            first = full.split('.')[0]
-            if first not in self.top:
-                continue
+            # deal with old-style relative imports
+            module_pkg = '.'.join(module.name[:-1])
+            full_relative = "%s.%s" % (module_pkg, full)
 
-            # if imported module on module_set add to list
-            imp_mod = self.by_name.get(full)
-            if imp_mod:
-                module.add_import(imp_mod)
-                continue
+            for imported_name in (full_relative, full):
+                imported = self._get_imported_module(imported_name)
+                if imported:
+                    module.add_import(imported)
+                    break
 
-            # last part of import section might not be a module
-            # remove last section
-            only = full.rsplit('.', 1)[0]
-            imp_mod2 = self.by_name.get(only)
-            if imp_mod2:
-                module.add_import(imp_mod2)
-                continue
-
-            # special case for __init__
-            if full in self.pkgs:
-                pkg_name = full  + ".__init__"
-                module.add_import(self.by_name[pkg_name])
-                continue
-
-            if only in self.pkgs:
-                pkg_name = only +  ".__init__"
-                module.add_import(self.by_name[pkg_name])
-                continue
-
-            assert False
+            # didnt find... must be out
 
 
 ######### start doit section
@@ -281,11 +282,13 @@ class DoitOutdated(object):
     how it works
     =============
 
-    * pytest_sessionstart: check configuration
+    * pytest_sessionstart: check configuration,
+                           find python files (if pkg specified)
     * pytest_collect_file: to find out python files that doit will keep track
+                           (if pkg not specified)
     * pytest_collection_modifyitems (get_outdated): run doit and remove
              up-to-date tests from test items
-    * pytest_runloop: print info on terminal
+    * pytest_runloop: print info on up-to-date (not excuted) on terminal
     * pytest_runtest_makereport: collect result from individual tests
     * pytest_sessionfinish (set_success): save successful tasks in doit db
     """

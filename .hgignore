@@ -2,7 +2,9 @@ syntax:glob
 
 *.pyc
 *.pyo
-*.doit.db
 *.egg-info
+
+.coverage
+*.doit.db
 dist
 
