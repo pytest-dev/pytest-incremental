@@ -79,7 +79,7 @@ class _PyModule(object):
                 name_list.reverse()
                 return name_list
             current_path = os.path.basename(parent_path)
-            parent_path = os.path.dirname(current_path)
+            parent_path = os.path.dirname(parent_path)
 
     def add_import(self, module):
         """add another module as import
@@ -134,23 +134,29 @@ class ModuleSet(object):
         """set imports for module"""
         module.imports = set()
         raw_imports = find_imports(module.path)
-        for x in raw_imports:
+        for import_entry in raw_imports:
+            try_names = []
             # join 'from' and 'import' part of import statement
-            full = ".".join(s for s in x[:2] if s is not None)
+            full = ".".join(s for s in import_entry[:2] if s)
 
-            # TODO: if levels
+            import_level = import_entry[3]
+            if import_level:
+                # intra package imports
+                intra = '.'.join(module.name[:-import_level] + [full])
+                try_names = (intra,)
+            else:
+                # deal with old-style relative imports
+                module_pkg = '.'.join(module.name[:-1])
+                full_relative = "%s.%s" % (module_pkg, full)
+                try_names = (full_relative, full,)
 
-            # deal with old-style relative imports
-            module_pkg = '.'.join(module.name[:-1])
-            full_relative = "%s.%s" % (module_pkg, full)
-
-            for imported_name in (full_relative, full):
+            for imported_name in try_names:
                 imported = self._get_imported_module(imported_name)
                 if imported:
                     module.add_import(imported)
                     break
 
-            # didnt find... must be out
+            # didnt find... must be out of tracked namespaces
 
 
 ######### start doit section

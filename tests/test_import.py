@@ -7,7 +7,8 @@ SAMPLE = os.path.join(os.path.dirname(__file__), 'sample')
 SAMPLE_INIT = os.path.join(SAMPLE, '__init__.py')
 SAMPLE_A = os.path.join(SAMPLE, 'sample_a.py')
 SAMPLE_B = os.path.join(SAMPLE, 'sample_b.py')
-SAMPLE_C = os.path.join(SAMPLE, 'sample_c.py')
+SUBSAMPLE = os.path.join(SAMPLE, 'subsample')
+SAMPLE_C = os.path.join(SUBSAMPLE, 'sample_c.py')
 
 def test_find_imports():
     imports = find_imports(SAMPLE_A)
@@ -19,10 +20,6 @@ def test_find_imports():
     assert ('sample_f', '*', None, 0) == imports[5]
     assert (None, 'sample_g.other', None, None) == imports[6]
     assert 7 == len(imports)
-
-
-class Test_PyModule(object):
-    pass # TODO
 
 
 class Test_ModuleSet(object):
@@ -104,6 +101,14 @@ class Test_ModuleSet(object):
     def test_relative_import(self):
         modset = ModuleSet([SAMPLE_INIT, SAMPLE_A])
         module = _PyModule(SAMPLE_B)
+        modset.set_imports(module)
+        assert SAMPLE_A in module.imports
+        assert ['sample','sample_a'] == modset.by_path[SAMPLE_A].name
+        assert 1 == len(module.imports)
+
+    def test_intrapkg_import(self):
+        modset = ModuleSet([SAMPLE_INIT, SAMPLE_A])
+        module = _PyModule(SAMPLE_C)
         modset.set_imports(module)
         assert SAMPLE_A in module.imports
         assert ['sample','sample_a'] == modset.by_path[SAMPLE_A].name
