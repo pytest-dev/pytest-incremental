@@ -52,16 +52,11 @@ def find_imports(file_path):
 class _PyModule(object):
     """Represents a python module. Can find imported modules
     """
-    def __init__(self, module_set, path, top=None):
-        """
-        @param module_set (ModuleSet)
-        """
-        self.module_set = module_set
+    def __init__(self, path):
         self.path = path
-        self.name = self.path2name(path)
+        self.name = self.get_namespace(path)
         self.imports = None # list of module names
         self.pkg = self.is_pkg(path)
-        self.top = top or self.get_top_namespace(path)
 
     @staticmethod
     def is_pkg(path):
@@ -69,75 +64,29 @@ class _PyModule(object):
                 os.path.exists(os.path.join(path, '__init__.py')))
 
     @classmethod
-    def get_top_namespace(cls, path):
-        """get top package or module name"""
-        print "n:", path
+    def get_namespace(cls, path):
+        """get package or module full name"""
+        name_list = []
         current_path = os.path.basename(path)
         if current_path.endswith('.py'):
             current_path = current_path[:-3]
         parent_path = os.path.dirname(path)
         while True:
-            print "-> %s + %s" % (parent_path, current_path)
+            name_list.append(current_path)
             if not cls.is_pkg(parent_path):
-                return current_path
+                name_list.reverse()
+                return name_list
             current_path = os.path.basename(parent_path)
             parent_path = os.path.dirname(current_path)
 
-    @staticmethod
-    def path2name(path):
-        """convert file path to module dot-separated module name"""
-        assert path.endswith('.py')
-        return path[:-3].replace('/', '.')
-
-    def _add_import(self, module):
+    def add_import(self, module):
         """add another module as import
         @param module: (_PyModule)
         """
         self.imports.add(module.path)
 
-    def set_imports(self):
-        """set imports from module
-        must be called after all PyModule objects have been created
-        """
-        self.imports = set()
-        raw_imports = find_imports(self.path)
-        for x in raw_imports:
-            # join 'from' and 'import' part of import statement
-            full = ".".join(s for s in x[:2] if s is not None)
-
-            # TODO: if levels
-
-            # get first part of import and remove imports to external modules
-            first = full.split('.')[0]
-            if first not in self.module_set.top:
-                continue
-
-            # if imported module on module_set add to list
-            imp_mod = self.module_set.modules.get(full)
-            if imp_mod:
-                self._add_import(imp_mod)
-                continue
-
-            # last part of import section might not be a module
-            # remove last section
-            only = full.rsplit('.', 1)[0]
-            imp_mod2 = self.module_set.modules.get(only)
-            if imp_mod2:
-                self._add_import(imp_mod2)
-                continue
-
-            # special case for __init__
-            if full in self.module_set.pkgs:
-                pkg_name = full  + ".__init__"
-                self._add_import(self.module_set.modules[pkg_name])
-                continue
-
-            if only in self.module_set.pkgs:
-                pkg_name = only +  ".__init__"
-                self._add_import(self.module_set.modules[pkg_name])
-                continue
-
-            assert False
+    def __repr__(self):
+        return "<_PyModule %s>" % self.path
 
 
 class ModuleSet(object):
@@ -146,27 +95,67 @@ class ModuleSet(object):
         # top packages/modules to match imports
         self.top = set()
         self.pkgs = set()
-        self.modules = {} # key by path
+        self.by_path = {} # module by path
+        self.by_name = {} # module by name (dot separated)
 
         for path in path_list:
             # create modules object
-            mod = _PyModule(self, path)
+            mod = _PyModule(path)
             # get top package/module
-            self.top.add(mod.top)
-            if mod.name.endswith('.__init__'):
-                self.pkgs.add(mod.name[:-9]) # 9 == len('.__init__')
-            self.modules[mod.name] = mod
+            self.top.add(mod.name[0])
+            if mod.name[-1] == '__init__':
+                self.pkgs.add('.'.join(mod.name[:-1]))
+            self.by_path[path] = mod
+            self.by_name['.'.join(mod.name)] = mod
 
 
-    def by_path(self, path):
-        name = _PyModule.path2name(path)
-        return self.modules.get(name, None)
+    def set_imports(self, module):
+        """set imports for module"""
+        module.imports = set()
+        raw_imports = find_imports(module.path)
+        for x in raw_imports:
+            # join 'from' and 'import' part of import statement
+            full = ".".join(s for s in x[:2] if s is not None)
+
+            # TODO: if levels
+
+            # get first part of import and remove imports to external modules
+            first = full.split('.')[0]
+            if first not in self.top:
+                continue
+
+            # if imported module on module_set add to list
+            imp_mod = self.by_name.get(full)
+            if imp_mod:
+                module.add_import(imp_mod)
+                continue
+
+            # last part of import section might not be a module
+            # remove last section
+            only = full.rsplit('.', 1)[0]
+            imp_mod2 = self.by_name.get(only)
+            if imp_mod2:
+                module.add_import(imp_mod2)
+                continue
+
+            # special case for __init__
+            if full in self.pkgs:
+                pkg_name = full  + ".__init__"
+                module.add_import(self.by_name[pkg_name])
+                continue
+
+            if only in self.pkgs:
+                pkg_name = only +  ".__init__"
+                module.add_import(self.by_name[pkg_name])
+                continue
+
+            assert False
 
 
 ######### start doit section
 
 def get_dep(module_path):
-    mod = PY_MODS.by_path(module_path)
+    mod = PY_MODS.by_path[module_path]
     mod.set_imports()
     return {'file_dep': [dep for dep in mod.imports if dep in PY_FILES]}
 def task_get_dep():
