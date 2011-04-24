@@ -1,7 +1,7 @@
 import os
 
-import pytest_doit
-from pytest_doit import find_imports, _PyModule, ModuleSet
+import pytest_incremental
+from pytest_incremental import find_imports, _PyModule, ModuleSet
 
 SAMPLE = os.path.join(os.path.dirname(__file__), 'sample')
 SAMPLE_INIT = os.path.join(SAMPLE, '__init__.py')
@@ -28,7 +28,7 @@ class Test_ModuleSet(object):
         def mockreturn(path):
             return [(None, 'imp1', None, None),
                     (None, 'imp2', None, None),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet(['imp1.py', 'imp2.py'])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -40,7 +40,7 @@ class Test_ModuleSet(object):
         def mockreturn(path):
             return [(None, 'imp1', None, None),
                     (None, 'imp2', None, None),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet(['imp1.py'])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -50,7 +50,7 @@ class Test_ModuleSet(object):
     def test_from_import_names(self, monkeypatch):
         def mockreturn(path):
             return [('imp1', 'xyz', None, 0),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet(['imp1.py'])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -60,7 +60,7 @@ class Test_ModuleSet(object):
     def test_import_names(self, monkeypatch):
         def mockreturn(path):
             return [(None, 'imp1.xyz', None, None),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet(['imp1.py'])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -70,7 +70,7 @@ class Test_ModuleSet(object):
     def test_import_package(self, monkeypatch):
         def mockreturn(path):
             return [(None, 'sample', None, None),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet([SAMPLE_INIT, SAMPLE_A])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -80,7 +80,7 @@ class Test_ModuleSet(object):
     def test_from_package_import(self, monkeypatch):
         def mockreturn(path):
             return [('sample', 'sample_a', None, 0),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet([SAMPLE_INIT, SAMPLE_A])
         module = _PyModule('main.py')
         modset.set_imports(module)
@@ -90,7 +90,7 @@ class Test_ModuleSet(object):
     def test_from_package_import_name(self, monkeypatch):
         def mockreturn(path):
             return [('sample', 'abc', None, 0),]
-        monkeypatch.setattr(pytest_doit, 'find_imports', mockreturn)
+        monkeypatch.setattr(pytest_incremental, 'find_imports', mockreturn)
         modset = ModuleSet([SAMPLE_INIT, SAMPLE_A])
         module = _PyModule('main.py')
         modset.set_imports(module)

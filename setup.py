@@ -1,12 +1,12 @@
 from distutils.core import setup
 
-setup(name = 'pytest-doit',
+setup(name = 'pytest-incremental',
       description = 'a pytest plugin to collect only "outdated" test files',
       version = '0.1.dev',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
-      url = 'https://bitbucket.org/schettino72/pytest-doit',
+      url = 'https://bitbucket.org/schettino72/pytest-incremental',
       classifiers = ['Development Status :: 3 - Alpha',
                      'Environment :: Console',
                      'Intended Audience :: Developers',
@@ -19,10 +19,10 @@ setup(name = 'pytest-doit',
                      'Programming Language :: Python :: 2.7',
                      'Topic :: Software Development :: Testing',
                      ],
-      py_modules = ['pytest_doit'],
+      py_modules = ['pytest_incremental'],
       install_requires = ['doit', 'pytest'],
       entry_points = {
-        'pytest11': ['pytest_doit = pytest_doit'],
+        'pytest11': ['pytest_incremental = pytest_incremental'],
         },
       )
 

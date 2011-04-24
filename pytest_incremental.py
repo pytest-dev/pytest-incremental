@@ -255,27 +255,27 @@ import pytest
 
 def pytest_addoption(parser):
     group = parser.getgroup("collect")
-    group.addoption('--outdated', action="store_true", dest="outdated_only",
+    group.addoption('--incremental', action="store_true", dest="incremental",
             default=False,
             help="execute only outdated tests (based on modified files)")
     group._addoption('--watch-pkg',
         action="append", dest="watch_pkg", default=[],
-        help="(doit plugin) watch for file changes in these packages")
+        help="(incremental plugin) watch for file changes in these packages")
 
 def pytest_configure(config):
-    if config.option.outdated_only:
-        config._doit = DoitOutdated()
-        config.pluginmanager.register(config._doit)
+    if config.option.incremental:
+        config._incremental = IncrementalPlugin()
+        config.pluginmanager.register(config._incremental)
 
 def pytest_unconfigure(config):
-    doit_plugin = getattr(config, '_doit', None)
-    if doit_plugin:
-        del config._doit
-        config.pluginmanager.unregister(doit_plugin)
+    incremental_plugin = getattr(config, '_incremental', None)
+    if incremental_plugin:
+        del config._incremental
+        config.pluginmanager.unregister(incremental_plugin)
 
 
-class DoitOutdated(object):
-    """pytest-doit plugin class
+class IncrementalPlugin(object):
+    """pytest-incremental plugin class
 
     @cvar DB_FILE: (str) file name used as doit db file
     @ivar tasks: (dict) with reference to doit tasks
@@ -299,7 +299,7 @@ class DoitOutdated(object):
     * pytest_sessionfinish (set_success): save successful tasks in doit db
     """
 
-    DB_FILE = '.pytest-doit'
+    DB_FILE = '.pytest-incremental'
 
     def __init__(self):
         self.tasks = None
@@ -345,7 +345,7 @@ class DoitOutdated(object):
             return
         if not (len(session.config.args) == 1 and
                 session.config.args[0] == os.getcwd()):
-            msg = ("(plugin-doit) You are required to setup --watch-pkg"
+            msg = ("(plugin-incremental) You are required to setup --watch-pkg"
                    " in order to use the plugin together with -k.")
             raise pytest.UsageError(msg)
 
