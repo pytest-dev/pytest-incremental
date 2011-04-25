@@ -15,7 +15,8 @@ def test_find_imports():
     assert (None, 'os', None, None) == imports[0]
     assert ('sample_b', 'xyz', None, 0) == imports[1]
     assert (None, 'sample_c', None, None) == imports[2]
-    assert ('', 'sample_d', None, 2) == imports[3]
+    assert not imports[3][0] # python2.6 == '', python2.7 == None
+    assert ('sample_d', None, 2) == imports[3][1:]
     assert ('sample_e', 'jkl', None, 2) == imports[4]
     assert ('sample_f', '*', None, 0) == imports[5]
     assert (None, 'sample_g.other', None, None) == imports[6]
