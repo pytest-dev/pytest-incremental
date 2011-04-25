@@ -163,7 +163,7 @@ class ModuleSet(object):
 
 def get_dep(module_path):
     mod = PY_MODS.by_path[module_path]
-    mod.set_imports()
+    PY_MODS.set_imports(mod)
     return {'file_dep': [dep for dep in mod.imports if dep in PY_FILES]}
 def task_get_dep():
     """get direct dependencies for each module"""
@@ -197,7 +197,9 @@ class OutdatedReporter(object):
         if task.name.startswith('outdated:'):
             self.outdated.append(task.name.split(':',1)[1])
     def add_failure(self, task, exception):
-        pass
+        if task.name.startswith('outdated:'):
+            return
+        raise pytest.UsageError("%s:%s" % (task.name, exception))
     def add_success(self, task):
         pass
     def skip_uptodate(self, task):
@@ -207,7 +209,7 @@ class OutdatedReporter(object):
     def cleanup_error(self, exception):
         pass
     def runtime_error(self, msg):
-        pass
+        raise Exception(msg)
     def teardown_task(self, task):
         pass
     def complete_run(self):
@@ -241,12 +243,6 @@ def constants(py_files, test_files):
     TEST_FILES[:] = test_files
     PY_MODS = ModuleSet(PY_FILES)
 
-
-# for manual testing
-#import glob
-#constants(glob.glob("doit/*.py") + glob.glob("tests/*.py"),
-#          glob.glob("tests/test_*.py")
-#          )
 
 ##################### end doit section
 
@@ -334,14 +330,23 @@ class IncrementalPlugin(object):
         db.close()
 
 
+    def _get_pkg_modules(self, pkg_name):
+        """get all package modules recursively"""
+        pkg_glob = os.path.join(pkg_name, "*.py")
+        this_modules = glob.glob(pkg_glob)
+        for dirname, dirnames, filenames in os.walk(pkg_name):
+            for subdirname in dirnames:
+                sub_path = os.path.join(dirname, subdirname)
+                if _PyModule.is_pkg(sub_path):
+                    this_modules.extend(self._get_pkg_modules(sub_path))
+        return this_modules
+
     def pytest_sessionstart(self, session):
         self.pkg_folders = session.config.option.watch_pkg
         # TODO all tasks should depend on the value of PACKAGES
         if self.pkg_folders:
             for pkg in self.pkg_folders:
-                # FIXME this must be recursive to find sub-packages
-                pkg_glob = os.path.join(pkg, "*.py")
-                self.py_files.extend(glob.glob(pkg_glob))
+                self.py_files.extend(self._get_pkg_modules(pkg))
             return
         if not (len(session.config.args) == 1 and
                 session.config.args[0] == os.getcwd()):
