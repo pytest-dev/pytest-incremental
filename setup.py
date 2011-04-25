@@ -1,8 +1,12 @@
 from distutils.core import setup
 
+_readme = open('README', 'r')
+README_TEXT = _readme.read()
+_readme.close()
+
 setup(name = 'pytest-incremental',
-      description = 'a pytest plugin to collect only "outdated" test files',
-      version = '0.1.dev',
+      description = 'an incremental test runner (pytest plugin)',
+      version = '0.1.0',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
@@ -24,5 +28,6 @@ setup(name = 'pytest-incremental',
       entry_points = {
         'pytest11': ['pytest_incremental = pytest_incremental'],
         },
+      long_description = README_TEXT,
       )
 
