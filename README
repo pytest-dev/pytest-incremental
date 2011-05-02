@@ -62,7 +62,25 @@ You can also enable it by default adding the following line to your ``pytest.ini
 watched packages
 ------------------
 
-By default all modules collected by pytest will used as dependencies if imported. In order to limit or extend the watched folders you must use the parameter ``--watch-pkg``
+By default all modules collected by py.test will be used as dependencies if imported. In order to limit or extend the watched folders you must use the parameter ``--watch-path``
+
+
+This can be used in case you want to watch for changes in modules that are in another project. For example if you are testing ``my_lib`` and want to check for changes in dependencies from your `py3rd` package::
+
+$ py.test --incremental --watch-pkg my_lib --watch-pkg ../py3rd-trunk/py3rd
+
+
+Note: If you want to execute tests from a single file like::
+
+  $ py.test  tests/test_foo.py
+
+It is required to use ``--watch-path`` because the source files will not be collected by py.test
+
+You should call::
+
+  $ py.test --incremental --watch-pkg my_lib tests/test_foo.py
+
+
 
 
 Limitations

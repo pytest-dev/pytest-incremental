@@ -259,13 +259,13 @@ import glob
 import pytest
 
 def pytest_addoption(parser):
-    group = parser.getgroup("collect")
+    group = parser.getgroup("incremental", "incremental testing")
     group.addoption('--incremental', action="store_true", dest="incremental",
             default=False,
             help="execute only outdated tests (based on modified files)")
-    group._addoption('--watch-pkg',
-        action="append", dest="watch_pkg", default=[],
-        help="(incremental plugin) watch for file changes in these packages")
+    group._addoption('--watch-path',
+        action="append", dest="watch_path", default=[],
+        help="file path of a package. watch for file changes in packages (multi-allowed)")
 
 def pytest_configure(config):
     if config.option.incremental:
@@ -333,7 +333,6 @@ class IncrementalPlugin(object):
         """mark doit test tasks as sucessful"""
         db = Dependency(self.DB_FILE)
         for path in test_files:
-            #print "saving", path
             task_name = "outdated:%s" % path
             db.save_success(self.tasks[task_name])
         db.close()
@@ -351,7 +350,7 @@ class IncrementalPlugin(object):
         return this_modules
 
     def pytest_sessionstart(self, session):
-        self.pkg_folders = session.config.option.watch_pkg
+        self.pkg_folders = session.config.option.watch_path
         # TODO all tasks should depend on the value of PACKAGES
         if self.pkg_folders:
             for pkg in self.pkg_folders:
@@ -359,7 +358,7 @@ class IncrementalPlugin(object):
             return
         if not (len(session.config.args) == 1 and
                 session.config.args[0] == os.getcwd()):
-            msg = ("(plugin-incremental) You are required to setup --watch-pkg"
+            msg = ("(plugin-incremental) You are required to setup --watch-path"
                    " in order to use the plugin together with -k.")
             raise pytest.UsageError(msg)
 
