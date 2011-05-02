@@ -170,6 +170,14 @@ class ModuleSet(object):
 
 ######### start doit section
 
+# make sure dependencies are not outdated by changes in watched packages
+def file_list(files):
+    ss = str(sorted(files))
+    return ss
+def task_watched_files():
+    return {'actions': [(file_list, (PY_FILES,))]}
+
+
 def get_dep(module_path):
     mod = PY_MODS.by_path[module_path]
     PY_MODS.set_imports(mod)
@@ -180,6 +188,7 @@ def task_get_dep():
         yield {'name': mod,
                'actions':[(get_dep,[mod])],
                'file_dep': [mod],
+               'result_dep': ['watched_files'],
                }
 
 def get_acc_dep(mod, dependencies):
@@ -193,6 +202,7 @@ def task_acc_dep():
                'actions': [(get_acc_dep, [mod])],
                'file_dep': [mod],
                'calc_dep': ["get_dep:%s" % mod],
+               'result_dep': ['watched_files'],
                }
 
 class OutdatedReporter(object):
@@ -351,7 +361,6 @@ class IncrementalPlugin(object):
 
     def pytest_sessionstart(self, session):
         self.pkg_folders = session.config.option.watch_path
-        # TODO all tasks should depend on the value of PACKAGES
         if self.pkg_folders:
             for pkg in self.pkg_folders:
                 self.py_files.extend(self._get_pkg_modules(pkg))
