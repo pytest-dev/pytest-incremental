@@ -438,23 +438,14 @@ class IncrementalPlugin(object):
             print "%s  [up-to-date]" % test_file
 
 
-    def pytest_runtest_makereport(self, item, call):
+    def pytest_runtest_logreport(self, report):
         """save success and failures result so we can decide which files
         should be marked as successful in doit
         """
-        if call.when == 'call':
-            failures = getattr(call, 'result', None)
-            # successful: call.result == []
-            # skipped, xfail: call doesnt have result attribute
-            if not failures:
-                # FIXME xdist gives None for failed test
-                if self.type == "slave" and failures is None:
-                    self.fail.add(item.location[0])
-                    return
-                # end - xdist bug workaround
-                self.success.add(item.location[0])
-            else:
-                self.fail.add(item.location[0])
+        if report.failed:
+            self.fail.add(report.location[0])
+        else:
+            self.success.add(report.location[0])
 
 
     def pytest_testnodedown(self, node, error):
