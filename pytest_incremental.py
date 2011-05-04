@@ -317,23 +317,31 @@ class IncrementalPlugin(object):
     DB_FILE = '.pytest-incremental'
 
     def __init__(self):
-        self.tasks = None
+        self.task_list = None
         self.py_files = []
         self.success = set()
         self.fail = set()
         self.uptodate = None
         self.pkg_folders = None
 
+        self.type = None # one of (normal, master, slave)
+        self.test_files = None # required for xdist
+
+
+    def _load_tasks(self, test_files):
+        constants(self.py_files, list(test_files))
+        dodo = loader.load_task_generators(sys.modules[__name__])
+        return dodo['task_list']
+
+
     def get_outdated(self, test_files):
         """run doit to find out which test files are "outdated"
         A test file is outdated if there was a change in the content in any
         import (direct or indirect) since last succesful execution
         """
-        constants(self.py_files, list(test_files))
-        dodo = loader.load_task_generators(sys.modules[__name__])
-        self.tasks = dict((t.name, t) for t in dodo['task_list'])
+        self.task_list = self._load_tasks(test_files)
         output = StringIO.StringIO()
-        doit_run(self.DB_FILE, dodo['task_list'], output, ['outdated'],
+        doit_run(self.DB_FILE, self.task_list, output, ['outdated'],
                  continue_=True, reporter=OutdatedReporter)
         output.seek(0)
         return output.read()
@@ -341,10 +349,11 @@ class IncrementalPlugin(object):
 
     def set_success(self, test_files):
         """mark doit test tasks as sucessful"""
+        task_dict = dict((t.name, t) for t in self.task_list)
         db = Dependency(self.DB_FILE)
         for path in test_files:
             task_name = "outdated:%s" % path
-            db.save_success(self.tasks[task_name])
+            db.save_success(task_dict[task_name])
         db.close()
 
 
@@ -359,17 +368,40 @@ class IncrementalPlugin(object):
                     this_modules.extend(self._get_pkg_modules(sub_path))
         return this_modules
 
+
     def pytest_sessionstart(self, session):
+        # figure out what type of node we are in.
+        session_name = session.__class__.__name__
+        if (session.config.pluginmanager.hasplugin('dsession') or
+            session_name == 'DSession'):
+            self.type = "master"
+        elif (hasattr(session.config, 'slaveinput') or
+              session_name == 'SlaveSession'):
+            self.type = "slave"
+        else:
+            self.type = "normal"
+
         self.pkg_folders = session.config.option.watch_path
+
+        if not self.pkg_folders:
+            if not (len(session.config.args) == 1 and
+                    session.config.args[0] == os.getcwd()):
+                msg = ("(plugin-incremental) You are required to setup "
+                       "--watch-path in order to use the plugin together "
+                       "with -k.")
+                raise pytest.UsageError(msg)
+            if self.type == "master":
+                msg = ("(plugin-incremental) You are required to setup "
+                       "--watch-path in order to use the plugin together "
+                       "with plugin-xdist")
+                raise pytest.UsageError(msg)
+
+        #
+        if self.type == "slave":
+            return
         if self.pkg_folders:
             for pkg in self.pkg_folders:
                 self.py_files.extend(self._get_pkg_modules(pkg))
-            return
-        if not (len(session.config.args) == 1 and
-                session.config.args[0] == os.getcwd()):
-            msg = ("(plugin-incremental) You are required to setup --watch-path"
-                   " in order to use the plugin together with -k.")
-            raise pytest.UsageError(msg)
 
 
     def pytest_collect_file(self, path, parent):
@@ -380,7 +412,9 @@ class IncrementalPlugin(object):
 
     def pytest_collection_modifyitems(self, session, config, items):
         """filter out up-to-date tests"""
+        # called on slave only!
         test_files = set((i.location[0] for i in items))
+        self.test_files = test_files
         outdated = set(eval(self.get_outdated(test_files)))
         selected = []
         deselected = []
@@ -413,13 +447,39 @@ class IncrementalPlugin(object):
             # successful: call.result == []
             # skipped, xfail: call doesnt have result attribute
             if not failures:
+                # FIXME xdist gives None for failed test
+                if self.type == "slave" and failures is None:
+                    self.fail.add(item.location[0])
+                    return
+                # end - xdist bug workaround
                 self.success.add(item.location[0])
             else:
                 self.fail.add(item.location[0])
 
 
+    def pytest_testnodedown(self, node, error):
+        """collect info from slave node"""
+        # this method is only called from master
+        self.success.update(node.slaveoutput['success'])
+        self.fail.update(node.slaveoutput['fail'])
+        if not self.test_files:
+            self.test_files = node.slaveoutput['test_files']
+
     def pytest_sessionfinish(self, session):
         """save success in doit"""
+        if self.type == 'slave':
+            config = session.config
+            config.slaveoutput['success'] = self.success
+            config.slaveoutput['fail'] = self.fail
+            config.slaveoutput['test_files'] = self.test_files
+            return
+        elif self.type == "master":
+            self.task_list = self._load_tasks(self.test_files)
+
+        print
+        print "SUCCESS:", self.success
+        print "FAIL:", self.fail
+
         # FIXME: need to check if all test were executed
         # in case -k is used. by now just consider not all were executed.
         if not getattr(session.config.option, 'keyword', None):
