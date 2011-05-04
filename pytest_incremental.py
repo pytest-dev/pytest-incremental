@@ -388,7 +388,7 @@ class IncrementalPlugin(object):
                     session.config.args[0] == os.getcwd()):
                 msg = ("(plugin-incremental) You are required to setup "
                        "--watch-path in order to use the plugin together "
-                       "with -k.")
+                       "with an path argument.")
                 raise pytest.UsageError(msg)
             if self.type == "master":
                 msg = ("(plugin-incremental) You are required to setup "
