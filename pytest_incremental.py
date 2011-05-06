@@ -205,6 +205,16 @@ def task_acc_dep():
                'result_dep': ['watched_files'],
                }
 
+def task__all_deps():
+    """dumb task just to make it easy to retrieve all file_dep (recursivelly)"""
+    for mod in PY_FILES:
+        yield {'name': mod,
+               'actions': None,
+               'file_dep': [mod],
+               'calc_dep': ["acc_dep:%s" % mod],
+               'verbosity': 0}
+
+
 class OutdatedReporter(object):
     """A doit reporter"""
     def __init__(self, outstream, options):
@@ -281,7 +291,11 @@ def pytest_addoption(parser):
     group.addoption(
         '--list-outdated', action="store_true",
         dest="list_outdated", default=False,
-        help="list")
+        help="print list of outdated test files")
+    group.addoption(
+        '--list-dependencies', action="store_true",
+        dest="list_dependencies", default=False,
+        help="print list of python modules being tracked and its dependencies")
 
 
 def pytest_configure(config):
@@ -331,7 +345,10 @@ class IncrementalPlugin(object):
         self.fail = set()
         self.uptodate = None
         self.pkg_folders = None
+
         self.list_outdated = False
+        self.list_dependencies = False
+        self.run = None
 
         self.type = None # one of (normal, master, slave)
         self.test_files = None # required for xdist
@@ -353,7 +370,8 @@ class IncrementalPlugin(object):
         doit_run(self.DB_FILE, self.task_list, output, ['outdated'],
                  continue_=True, reporter=OutdatedReporter)
         output.seek(0)
-        return output.read()
+        got = output.read()
+        return got
 
 
     def set_success(self, test_files):
@@ -413,6 +431,9 @@ class IncrementalPlugin(object):
         self.type = self._set_type(session)
         self.pkg_folders = session.config.option.watch_path
         self.list_outdated = session.config.option.list_outdated
+        self.list_dependencies = session.config.option.list_dependencies
+        self.run = not any((self.list_outdated, self.list_dependencies))
+
         self._check_cmd_options(session.config)
         if self.type == "slave":
             return
@@ -432,6 +453,9 @@ class IncrementalPlugin(object):
         # called on slave only!
         test_files = set((i.location[0] for i in items))
         self.test_files = test_files
+        # list dependencies doesnt care about current state of outdated
+        if self.list_dependencies:
+            return
         outdated = set(eval(self.get_outdated(test_files)))
         selected = []
         deselected = []
@@ -451,21 +475,29 @@ class IncrementalPlugin(object):
         """print up-to-date tests info before running tests or...
         if --list-outdated just print the outdated ones (and dont run tests)
         """
-        uptodate_test_files = set((item.location[0] for item in self.uptodate))
-        if not self.list_outdated:
-            self.print_uptodate_test_files(uptodate_test_files)
-        else:
-            self.print_outdated(uptodate_test_files)
-            return 0 # dont execute tests
+        if self.run:
+            self.print_uptodate_test_files()
+            return
 
-    def print_uptodate_test_files(self, uptodate_test_files):
+        # print info commands
+        if self.list_outdated:
+            self.print_outdated()
+        elif self.list_dependencies:
+            self.print_deps()
+        return 0 # dont execute tests
+
+
+    def print_uptodate_test_files(self):
         """print info on up-to-date tests"""
+        uptodate_test_files = set((item.location[0] for item in self.uptodate))
         if uptodate_test_files:
             print
         for test_file in sorted(uptodate_test_files):
             print "%s  [up-to-date]" % test_file
 
-    def print_outdated(self, uptodate_test_files):
+    def print_outdated(self):
+        """print list of outdated test files"""
+        uptodate_test_files = set((item.location[0] for item in self.uptodate))
         outdated = []
         for test in self.test_files:
             if test not in uptodate_test_files:
@@ -474,11 +506,23 @@ class IncrementalPlugin(object):
         print
         if outdated:
             print "List of outdated test files:"
-            for test in outdated:
+            for test in sorted(outdated):
                 print test
         else:
             print "All test files are up to date"
 
+
+    def print_deps(self):
+        """print list of all python modules being tracked and its dependencies"""
+        self.task_list = self._load_tasks(self.test_files)
+        doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(), ['_all_deps'],
+                 continue_=True, reporter=OutdatedReporter)
+        dep_dict = {}
+        for task in self.task_list:
+            if task.name.startswith('_all_deps:'):
+                dep_dict[task.name[10:]] = sorted(task.file_dep)
+        for name in sorted(dep_dict):
+            print "%s: %s" % (name, ", ".join(dep_dict[name]))
 
 
 
@@ -503,6 +547,8 @@ class IncrementalPlugin(object):
 
     def pytest_sessionfinish(self, session):
         """save success in doit"""
+        if not self.run:
+            return
         if self.type == 'slave':
             config = session.config
             config.slaveoutput['success'] = self.success
@@ -512,10 +558,10 @@ class IncrementalPlugin(object):
         elif self.type == "master":
             self.task_list = self._load_tasks(self.test_files)
 
-        # FIXME - remove debug messages
-        print
-        print "SUCCESS:", self.success
-        print "FAIL:", self.fail
+        # debug messages
+        # print
+        # print "SUCCESS:", self.success
+        # print "FAIL:", self.fail
 
         # FIXME: need to check if all test were executed
         # in case -k is used. by now just consider not all were executed.
