@@ -299,9 +299,13 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    if config.option.incremental or config.option.list_outdated:
+    if (config.option.incremental or
+        config.option.list_outdated or
+        config.option.list_dependencies
+        ):
         config._incremental = IncrementalPlugin()
         config.pluginmanager.register(config._incremental)
+
 
 
 def pytest_unconfigure(config):
@@ -435,8 +439,6 @@ class IncrementalPlugin(object):
         self.run = not any((self.list_outdated, self.list_dependencies))
 
         self._check_cmd_options(session.config)
-        if self.type == "slave":
-            return
         if self.pkg_folders:
             for pkg in self.pkg_folders:
                 self.py_files.extend(self._get_pkg_modules(pkg))
@@ -557,6 +559,10 @@ class IncrementalPlugin(object):
             return
         elif self.type == "master":
             self.task_list = self._load_tasks(self.test_files)
+            # we need to make sure task have all calc_dep calculated
+            doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(),
+                     ['outdated'],
+                     continue_=True, reporter=OutdatedReporter)
 
         # debug messages
         # print
