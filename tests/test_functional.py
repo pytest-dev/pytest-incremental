@@ -62,3 +62,34 @@ def test_ok_reexecute_only_if_changed(testdir):
     result.stdout.fnmatch_lines([
             '*test_foo PASSED',
             ])
+
+
+TEST_SKIP =  """
+import pytest
+
+@pytest.mark.skipif("True")
+def test_my_skip():
+    assert False # not executed
+
+@pytest.mark.xfail
+def test_my_fail():
+    assert False
+"""
+
+
+def test_skip_same_behaviour_as_passed(testdir):
+    # first time
+    test = testdir.makepyfile(TEST_SKIP)
+    result = testdir.runpytest('-v', '--incremental',
+                               '--watch-path=%s'%test.dirpath(), test)
+    result.stdout.fnmatch_lines([
+            '*test_my_skip SKIPPED',
+            '*test_my_fail xfail',
+            ])
+
+    # second time not executed because up-to-date
+    result2 = testdir.runpytest('-v', '--incremental',
+                                '--watch-path=%s'%test.dirpath(), test)
+    result2.stdout.fnmatch_lines([
+            '*up-to-date*',
+            ])
