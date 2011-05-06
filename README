@@ -12,6 +12,9 @@ an incremental test runner (pytest plugin)
 What is an "incremental test runner" ?
 =======================================
 
+The idea is to execute your tests faster by executing not all of them
+but only the "required" ones.
+
 When talking about build-tools it is common to refer to the terms:
 
  * initial (full) build - all files are compiled
@@ -19,13 +22,15 @@ When talking about build-tools it is common to refer to the terms:
  * no-op build - no files are compiled (none changed since last execution)
 
 So an "incremental test runner" will only re-execute tests that were affected
-by changes in the source code since last test execution.
+by changes in the source code since last successful execution.
 
 
 How it works ?
 ================
 
 `pytest-incremental` is a `pytest <http://pytest.org/>`_ plugin. So if you can run your test suite with pytest you can use `pytest-incremental`.
+
+Note that pytest has support to run standart unittest's and nose's tests. So even if you dont use pytest as a test framework you might be able to use it as a test runner.
 
 The plugin will analyse your python source files and through its imports define the dependencies of the modules. `doit <http://python-doit.sourceforge.net>`_ is used to keep track of the dependencies and save results. The plugin will modify how pytest collect your tests. pytest do the rest of the job of actually running the tests and reporting the results.
 
@@ -80,6 +85,18 @@ You should call::
 
   $ py.test --incremental --watch-pkg my_lib tests/test_foo.py
 
+
+dependencies
+--------------
+
+You can check what are the actual dependencies detected by running the command::
+
+ $ py.test --list-dependencies
+
+
+You can also check what are the outdated tests without executing them::
+
+ $ py.test --list-outdated
 
 
 

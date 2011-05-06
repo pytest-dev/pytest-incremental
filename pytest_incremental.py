@@ -335,8 +335,9 @@ class IncrementalPlugin(object):
                            (if pkg not specified)
     * pytest_collection_modifyitems (get_outdated): run doit and remove
              up-to-date tests from test items
-    * pytest_runloop: print info on up-to-date (not excuted) on terminal
+    * pytest_runtestloop: print info on up-to-date (not excuted) on terminal
     * pytest_runtest_makereport: collect result from individual tests
+    * pytest_testnodedown: (xdist) send result from slave to master
     * pytest_sessionfinish (set_success): save successful tasks in doit db
     """
 
@@ -359,6 +360,7 @@ class IncrementalPlugin(object):
 
 
     def _load_tasks(self, test_files):
+        """load this file as dodo file to collect tasks"""
         constants(self.py_files, list(test_files))
         dodo = loader.load_task_generators(sys.modules[__name__])
         return dodo['task_list']
@@ -401,6 +403,7 @@ class IncrementalPlugin(object):
 
 
     def _check_cmd_options(self, config):
+        """sanity checking"""
         if not self.pkg_folders:
             if not (len(config.args) == 1 and
                     config.args[0] == os.getcwd()):

@@ -6,7 +6,11 @@ Changes
 0.2.0
 =========
 
-
+- support for xdist --dist=load
+- added option --list-dependencies
+- added option --list-outdated
+- fix bug. correctly detect when a test fails
+- rename option --watch-pkg to --watch-path
 
 0.1.0 (*2011-04-25*)
 ====================
