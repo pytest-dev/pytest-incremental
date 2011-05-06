@@ -273,7 +273,7 @@ def pytest_addoption(parser):
     group.addoption('--incremental', action="store_true", dest="incremental",
             default=False,
             help="execute only outdated tests (based on modified files)")
-    group._addoption('--watch-path',
+    group.addoption('--watch-path',
         action="append", dest="watch_path", default=[],
         help="file path of a package. watch for file changes in packages (multi-allowed)")
 
@@ -369,23 +369,10 @@ class IncrementalPlugin(object):
         return this_modules
 
 
-    def pytest_sessionstart(self, session):
-        # figure out what type of node we are in.
-        session_name = session.__class__.__name__
-        if (session.config.pluginmanager.hasplugin('dsession') or
-            session_name == 'DSession'):
-            self.type = "master"
-        elif (hasattr(session.config, 'slaveinput') or
-              session_name == 'SlaveSession'):
-            self.type = "slave"
-        else:
-            self.type = "normal"
-
-        self.pkg_folders = session.config.option.watch_path
-
+    def _check_cmd_options(self, config):
         if not self.pkg_folders:
-            if not (len(session.config.args) == 1 and
-                    session.config.args[0] == os.getcwd()):
+            if not (len(config.args) == 1 and
+                    config.args[0] == os.getcwd()):
                 msg = ("(plugin-incremental) You are required to setup "
                        "--watch-path in order to use the plugin together "
                        "with an path argument.")
@@ -396,7 +383,23 @@ class IncrementalPlugin(object):
                        "with plugin-xdist")
                 raise pytest.UsageError(msg)
 
-        #
+    def _set_type(self, session):
+        # figure out what type of node we are in.
+        session_name = session.__class__.__name__
+        if (session.config.pluginmanager.hasplugin('dsession') or
+            session_name == 'DSession'):
+            return "master"
+        elif (hasattr(session.config, 'slaveinput') or
+              session_name == 'SlaveSession'):
+            return "slave"
+        else:
+            return "normal"
+
+
+    def pytest_sessionstart(self, session):
+        self.type = self._set_type(session)
+        self.pkg_folders = session.config.option.watch_path
+        self._check_cmd_options(session.config)
         if self.type == "slave":
             return
         if self.pkg_folders:
