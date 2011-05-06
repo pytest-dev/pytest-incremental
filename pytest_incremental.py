@@ -270,17 +270,25 @@ import pytest
 
 def pytest_addoption(parser):
     group = parser.getgroup("incremental", "incremental testing")
-    group.addoption('--incremental', action="store_true", dest="incremental",
-            default=False,
-            help="execute only outdated tests (based on modified files)")
-    group.addoption('--watch-path',
-        action="append", dest="watch_path", default=[],
+    group.addoption(
+        '--incremental', action="store_true",
+        dest="incremental", default=False,
+        help="execute only outdated tests (based on modified files)")
+    group.addoption(
+        '--watch-path', action="append",
+        dest="watch_path", default=[],
         help="file path of a package. watch for file changes in packages (multi-allowed)")
+    group.addoption(
+        '--list-outdated', action="store_true",
+        dest="list_outdated", default=False,
+        help="list")
+
 
 def pytest_configure(config):
-    if config.option.incremental:
+    if config.option.incremental or config.option.list_outdated:
         config._incremental = IncrementalPlugin()
         config.pluginmanager.register(config._incremental)
+
 
 def pytest_unconfigure(config):
     incremental_plugin = getattr(config, '_incremental', None)
@@ -323,6 +331,7 @@ class IncrementalPlugin(object):
         self.fail = set()
         self.uptodate = None
         self.pkg_folders = None
+        self.list_outdated = False
 
         self.type = None # one of (normal, master, slave)
         self.test_files = None # required for xdist
@@ -384,7 +393,10 @@ class IncrementalPlugin(object):
                 raise pytest.UsageError(msg)
 
     def _set_type(self, session):
-        # figure out what type of node we are in.
+        """figure out what type of node (xdist) we are in.
+        'normal' if not using xdist
+        or master/slave
+        """
         session_name = session.__class__.__name__
         if (session.config.pluginmanager.hasplugin('dsession') or
             session_name == 'DSession'):
@@ -397,8 +409,10 @@ class IncrementalPlugin(object):
 
 
     def pytest_sessionstart(self, session):
+        """initialization and sanity checking"""
         self.type = self._set_type(session)
         self.pkg_folders = session.config.option.watch_path
+        self.list_outdated = session.config.option.list_outdated
         self._check_cmd_options(session.config)
         if self.type == "slave":
             return
@@ -431,14 +445,41 @@ class IncrementalPlugin(object):
         self.uptodate = deselected
 
 
+
     # FIXME should use termial to print stuff
     def pytest_runtestloop(self):
-        """print info on up-to-date tests"""
+        """print up-to-date tests info before running tests or...
+        if --list-outdated just print the outdated ones (and dont run tests)
+        """
         uptodate_test_files = set((item.location[0] for item in self.uptodate))
+        if not self.list_outdated:
+            self.print_uptodate_test_files(uptodate_test_files)
+        else:
+            self.print_outdated(uptodate_test_files)
+            return 0 # dont execute tests
+
+    def print_uptodate_test_files(self, uptodate_test_files):
+        """print info on up-to-date tests"""
         if uptodate_test_files:
             print
         for test_file in sorted(uptodate_test_files):
             print "%s  [up-to-date]" % test_file
+
+    def print_outdated(self, uptodate_test_files):
+        outdated = []
+        for test in self.test_files:
+            if test not in uptodate_test_files:
+                outdated.append(test)
+
+        print
+        if outdated:
+            print "List of outdated test files:"
+            for test in outdated:
+                print test
+        else:
+            print "All test files are up to date"
+
+
 
 
     def pytest_runtest_logreport(self, report):
@@ -459,6 +500,7 @@ class IncrementalPlugin(object):
         if not self.test_files:
             self.test_files = node.slaveoutput['test_files']
 
+
     def pytest_sessionfinish(self, session):
         """save success in doit"""
         if self.type == 'slave':
@@ -470,6 +512,7 @@ class IncrementalPlugin(object):
         elif self.type == "master":
             self.task_list = self._load_tasks(self.test_files)
 
+        # FIXME - remove debug messages
         print
         print "SUCCESS:", self.success
         print "FAIL:", self.fail
