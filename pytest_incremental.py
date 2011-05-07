@@ -296,12 +296,16 @@ def pytest_addoption(parser):
         '--list-dependencies', action="store_true",
         dest="list_dependencies", default=False,
         help="print list of python modules being tracked and its dependencies")
-
+    group.addoption(
+        '--graph-dependencies', action="store_true",
+        dest="graph_dependencies", default=False,
+        help="create graph file of dependencies in dot format 'imports.dot'")
 
 def pytest_configure(config):
     if (config.option.incremental or
         config.option.list_outdated or
-        config.option.list_dependencies
+        config.option.list_dependencies or
+        config.option.graph_dependencies
         ):
         config._incremental = IncrementalPlugin()
         config.pluginmanager.register(config._incremental)
@@ -353,6 +357,7 @@ class IncrementalPlugin(object):
 
         self.list_outdated = False
         self.list_dependencies = False
+        self.graph_dependencies = False
         self.run = None
 
         self.type = None # one of (normal, master, slave)
@@ -439,7 +444,10 @@ class IncrementalPlugin(object):
         self.pkg_folders = session.config.option.watch_path
         self.list_outdated = session.config.option.list_outdated
         self.list_dependencies = session.config.option.list_dependencies
-        self.run = not any((self.list_outdated, self.list_dependencies))
+        self.graph_dependencies = session.config.option.graph_dependencies
+        self.run = not any((self.list_outdated,
+                            self.list_dependencies,
+                            self.graph_dependencies))
 
         self._check_cmd_options(session.config)
         if self.pkg_folders:
@@ -459,7 +467,7 @@ class IncrementalPlugin(object):
         test_files = set((i.location[0] for i in items))
         self.test_files = test_files
         # list dependencies doesnt care about current state of outdated
-        if self.list_dependencies:
+        if self.list_dependencies or self.graph_dependencies:
             return
         outdated = set(eval(self.get_outdated(test_files)))
         selected = []
@@ -489,6 +497,8 @@ class IncrementalPlugin(object):
             self.print_outdated()
         elif self.list_dependencies:
             self.print_deps()
+        elif self.graph_dependencies:
+            self.create_dot_graph()
         return 0 # dont execute tests
 
 
@@ -529,6 +539,26 @@ class IncrementalPlugin(object):
         for name in sorted(dep_dict):
             print "%s: %s" % (name, ", ".join(dep_dict[name]))
 
+    def create_dot_graph(self):
+        """create a graph of imports in dot format
+        dot -Tpng -o imports.png imports.dot
+        """
+        self.task_list = self._load_tasks(self.test_files)
+        doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(), ['get_dep'],
+                 continue_=True, reporter=OutdatedReporter)
+        dep_dict = {}
+        for task in self.task_list:
+            if task.name.startswith('get_dep:'):
+                dep_dict[task.name[8:]] = task.values['file_dep']
+        with open('imports.dot', 'w') as dot_file:
+            dot_file.write('digraph imports {\n')
+            for name, imports in dep_dict.iteritems():
+                if name in self.test_files:
+                    dot_file.write('"%s" [color = red]\n' % name)
+                for imported in imports:
+                    line = ('"%s" -> "%s"\n' % (name, imported))
+                    dot_file.write(line)
+            dot_file.write('}\n')
 
 
     def pytest_runtest_logreport(self, report):

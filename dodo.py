@@ -1,7 +1,7 @@
 
 import glob
 
-CODE_FILES = glob.glob("pytest_doit.py")
+CODE_FILES = glob.glob("pytest_incremental.py")
 TEST_FILES = glob.glob("tests/test_*.py")
 
 
