@@ -11,6 +11,7 @@ import os
 import sys
 import ast
 import StringIO
+import fcntl
 
 from doit import loader
 from doit.dependency import Dependency
@@ -378,8 +379,18 @@ class IncrementalPlugin(object):
         """
         self.task_list = self._load_tasks(test_files)
         output = StringIO.StringIO()
-        doit_run(self.DB_FILE, self.task_list, output, ['outdated'],
-                 continue_=True, reporter=OutdatedReporter)
+        # lock for parallel access to DB
+        if self.type == 'slave':
+            lock_file = '.pytest-incremental-lock'
+            lock_fd = open(lock_file, 'w')
+            fcntl.lockf(lock_fd, fcntl.LOCK_EX)
+        try:
+            doit_run(self.DB_FILE, self.task_list, output, ['outdated'],
+                     continue_=True, reporter=OutdatedReporter)
+        finally:
+            if self.type == 'slave':
+                fcntl.lockf(lock_fd, fcntl.LOCK_UN)
+                lock_fd.close()
         output.seek(0)
         got = output.read()
         return got
