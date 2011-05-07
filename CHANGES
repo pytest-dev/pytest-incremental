@@ -3,9 +3,10 @@
 Changes
 =======
 
-0.2.0
-=========
+0.2.0 (*2011-05-07*)
+=====================
 
+- added option --graph-dependencies
 - support for xdist --dist=load
 - added option --list-dependencies
 - added option --list-outdated
