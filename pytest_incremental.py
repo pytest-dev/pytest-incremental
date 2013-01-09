@@ -198,7 +198,6 @@ class IncrementalTasks(object):
 
     def _get_dep(self, module_path):
         """action: return imports from module as file_dep (for calc_dict)"""
-        #raise Exception(str(self.py_mods.by_path) + '---' + module_path)
         mod = self.py_mods.by_path[module_path]
         self.py_mods.set_imports(mod)
         # filter out imports not being tracked
