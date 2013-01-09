@@ -6,7 +6,7 @@ _readme.close()
 
 setup(name = 'pytest-incremental',
       description = 'an incremental test runner (pytest plugin)',
-      version = '0.2.0',
+      version = '0.3.0',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',

@@ -1,3 +1,4 @@
+import time
 
 pytest_plugins = 'pytester'
 
@@ -44,24 +45,22 @@ def test_ok_reexecute_only_if_changed(testdir):
     test = testdir.makepyfile(TEST_OK)
     result = testdir.runpytest('-v', '--incremental',
                                '--watch-path=%s'%test.dirpath(), test)
-    result.stdout.fnmatch_lines([
-            '*test_foo PASSED',
-            ])
+    result.stdout.fnmatch_lines(['*test_foo PASSED'])
 
     # second time not executed because up-to-date
     result2 = testdir.runpytest('-v', '--incremental',
                                 '--watch-path=%s'%test.dirpath(), test)
-    result2.stdout.fnmatch_lines([
-            '*up-to-date*',
-            ])
+    result2.stdout.fnmatch_lines(['*up-to-date*'])
+
+    # sleep for a while to make sure modified content
+    # wont have the same timestamp
+    time.sleep(0.5)
 
     # change file, re-execute tests
     test2 = testdir.makepyfile(TEST_OK_2)
     result = testdir.runpytest('-v', '--incremental',
                                '--watch-path=%s'%test.dirpath(), test2)
-    result.stdout.fnmatch_lines([
-            '*test_foo PASSED',
-            ])
+    result.stdout.fnmatch_lines(['*test_foo PASSED'])
 
 
 TEST_SKIP =  """

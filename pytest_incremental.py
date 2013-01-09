@@ -1,22 +1,22 @@
 """
 pytest-incremental : an incremental test runner (pytest plugin)
+https://bitbucket.org/schettino72/pytest-incremental
 
 The MIT License - see LICENSE file
-Copyright (c) 2011 Eduardo Naufel Schettino
+Copyright (c) 2011-2013 Eduardo Naufel Schettino
 """
 
-__version__ = (0, 2, 0)
+__version__ = (0, 3, 0)
 
 import os
-import sys
 import ast
 import StringIO
 import fcntl
 
-from doit import loader
 from doit.dependency import Dependency
-from doit.cmds import doit_run
-
+from doit.cmd_base import ModuleTaskLoader
+from doit.cmd_run import Run
+from doit.tools import result_dep
 
 ############# find imports using AST
 
@@ -171,49 +171,101 @@ class ModuleSet(object):
 
 ######### start doit section
 
-# make sure dependencies are not outdated by changes in watched packages
-def file_list(files):
-    ss = str(sorted(files))
-    return ss
-def task_watched_files():
-    return {'actions': [(file_list, (PY_FILES,))]}
+class IncrementalTasks(object):
+    """generate doit tasks used by pytest-incremental
+
+    @ivar py_mods (ModuleSet)
+    @ivar py_files (list - str): files being watched for changes
+    """
+    def __init__(self, py_files):
+        self.py_files = py_files
+        self.py_mods = ModuleSet(py_files)
+        print "YYYYYYYYYYYY", self.py_files
+
+    def gen_watched_files(self):
+        """task to be used as a result_dep
+
+        Result contains a list of modules with tests.
+
+        This is required because list of imports per module will be filtered
+        out based on this value.
+        """
+        yield {
+            'basename': 'watched_files',
+            'actions': [ (lambda fl: str(sorted(fl)), [self.py_files]) ]
+            }
 
 
-def get_dep(module_path):
-    mod = PY_MODS.by_path[module_path]
-    PY_MODS.set_imports(mod)
-    return {'file_dep': [dep for dep in mod.imports if dep in PY_FILES]}
-def task_get_dep():
-    """get direct dependencies for each module"""
-    for mod in PY_FILES:
-        yield {'name': mod,
-               'actions':[(get_dep,[mod])],
-               'file_dep': [mod],
-               'result_dep': ['watched_files'],
-               }
+    def _get_dep(self, module_path):
+        """action: return imports from module as file_dep (for calc_dict)"""
+        mod = self.py_mods.by_path[module_path]
+        self.py_mods.set_imports(mod)
+        # filter out imports not being tracked
+        return {'file_dep': [dep for dep in mod.imports if dep in self.py_files]}
 
-def get_acc_dep(mod, dependencies):
-    """get direct and indirect dependencies"""
-    acc = ["acc_dep:%s" %m for m in dependencies]
-    return {'calc_dep': acc,
-            'file_dep': list(dependencies)}
-def task_acc_dep():
-    for mod in PY_FILES:
-        yield {'name': mod,
-               'actions': [(get_acc_dep, [mod])],
-               'file_dep': [mod],
-               'calc_dep': ["get_dep:%s" % mod],
-               'result_dep': ['watched_files'],
-               }
 
-def task__all_deps():
-    """dumb task just to make it easy to retrieve all file_dep (recursivelly)"""
-    for mod in PY_FILES:
-        yield {'name': mod,
-               'actions': None,
-               'file_dep': [mod],
-               'calc_dep': ["acc_dep:%s" % mod],
-               'verbosity': 0}
+    @staticmethod
+    def _acc_dep(mod, dependencies):
+        """action: get direct and indirect dependencies"""
+        acc = ["acc_dep:%s" %m for m in dependencies]
+        return {
+            'calc_dep': acc,
+            'file_dep': list(dependencies)
+            }
+
+
+    def gen_deps(self):
+        """get direct dependencies for each module"""
+        for mod in self.py_files:
+            # direct dependencies
+            yield {
+                'basename': 'get_dep',
+                'name': mod,
+                'actions':[(self._get_dep, [mod])],
+                'file_dep': [mod],
+                'uptodate': [result_dep('watched_files')],
+                }
+
+            # accumulated dependencies
+            yield {
+                'basename': 'acc_dep',
+                'name': mod,
+                'actions': [(self._acc_dep, [mod])],
+                'file_dep': [mod],
+                'calc_dep': ["get_dep:%s" % mod],
+                'uptodate': [result_dep('watched_files')],
+                }
+
+            # dumb task just to make it easy to
+            # retrieve all file_dep (recursivelly)
+            yield {
+                'basename': '_all_deps',
+                'name': mod,
+                'actions': None,
+                'file_dep': [mod],
+                'calc_dep': ["acc_dep:%s" % mod],
+                'verbosity': 0,
+                }
+
+    def gen_outdated(self, test_files):
+        """find which tests are not up-to-date"""
+        for test in test_files:
+            yield {
+                'basename': 'outdated',
+                'name': test,
+                'actions': [lambda : False], # always fail if executed
+                'file_dep': [test],
+                'calc_dep': ["acc_dep:%s" % test],
+                'verbosity': 0,
+                }
+
+
+def task_gen():
+    """genrate all tasks"""
+    inc = IncrementalTasks(PY_FILES)
+    yield inc.gen_watched_files()
+    yield inc.gen_deps()
+    yield inc.gen_outdated(TEST_FILES)
 
 
 class OutdatedReporter(object):
@@ -245,33 +297,13 @@ class OutdatedReporter(object):
     def complete_run(self):
         self.outstream.write("%r" % self.outdated)
 
-def task_outdated():
-    """find which tests are not up-to-date"""
-    def fail():
-        return False
-    for test in TEST_FILES:
-        yield {'name': test,
-               'actions': [fail],
-               'file_dep': [test],
-               'calc_dep': ["acc_dep:%s" % test],
-               'verbosity': 0}
-
-
-# required to execute doit tasks without using py.test
-DOIT_CONFIG = {'continue': True,
-               'reporter': OutdatedReporter,
-               }
-
-
+### XXX remove this crap
 TEST_FILES = []
-PY_FILES = []
-PY_MODS = []
+PY_FILES = [] # list of files being tracked for changes
 
 def constants(py_files, test_files):
-    global PY_MODS
     PY_FILES[:] = list(set(py_files + test_files))
     TEST_FILES[:] = test_files
-    PY_MODS = ModuleSet(PY_FILES)
 
 
 ##################### end doit section
@@ -302,6 +334,7 @@ def pytest_addoption(parser):
         dest="graph_dependencies", default=False,
         help="create graph file of dependencies in dot format 'imports.dot'")
 
+
 def pytest_configure(config):
     if (config.option.incremental or
         config.option.list_outdated or
@@ -310,7 +343,6 @@ def pytest_configure(config):
         ):
         config._incremental = IncrementalPlugin()
         config.pluginmanager.register(config._incremental)
-
 
 
 def pytest_unconfigure(config):
@@ -365,11 +397,20 @@ class IncrementalPlugin(object):
         self.test_files = None # required for xdist
 
 
-    def _load_tasks(self, test_files):
+    def _run_doit(self, test_files, output, sel_tasks):
         """load this file as dodo file to collect tasks"""
         constants(self.py_files, list(test_files))
-        dodo = loader.load_task_generators(sys.modules[__name__])
-        return dodo['task_list']
+        config = {'dep_file': self.DB_FILE,
+                  'continue': True,
+                  'reporter': OutdatedReporter,
+                  'outfile': output,
+                  }
+        ctx = globals()
+        ctx['DOIT_CONFIG'] = config
+        loader = ModuleTaskLoader(ctx)
+        cmd = Run(task_loader=loader)
+        cmd.parse_execute(sel_tasks)
+        self.task_list = cmd.task_list
 
 
     def get_outdated(self, test_files):
@@ -377,16 +418,15 @@ class IncrementalPlugin(object):
         A test file is outdated if there was a change in the content in any
         import (direct or indirect) since last succesful execution
         """
-        self.task_list = self._load_tasks(test_files)
-        output = StringIO.StringIO()
         # lock for parallel access to DB
         if self.type == 'slave':
             lock_file = '.pytest-incremental-lock'
             lock_fd = open(lock_file, 'w')
             fcntl.lockf(lock_fd, fcntl.LOCK_EX)
         try:
-            doit_run(self.DB_FILE, self.task_list, output, ['outdated'],
-                     continue_=True, reporter=OutdatedReporter)
+            output = StringIO.StringIO()
+            outdated_tasks = ["outdated:%s" % path for path in test_files]
+            self._run_doit(test_files, output, outdated_tasks)
         finally:
             if self.type == 'slave':
                 fcntl.lockf(lock_fd, fcntl.LOCK_UN)
@@ -480,7 +520,8 @@ class IncrementalPlugin(object):
         # list dependencies doesnt care about current state of outdated
         if self.list_dependencies or self.graph_dependencies:
             return
-        outdated = set(eval(self.get_outdated(test_files)))
+        outdated_str = self.get_outdated(test_files)
+        outdated = set(eval(outdated_str))
         selected = []
         deselected = []
         for colitem in items:
@@ -540,9 +581,7 @@ class IncrementalPlugin(object):
 
     def print_deps(self):
         """print list of all python modules being tracked and its dependencies"""
-        self.task_list = self._load_tasks(self.test_files)
-        doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(), ['_all_deps'],
-                 continue_=True, reporter=OutdatedReporter)
+        self._run_doit(self.test_files, StringIO.StringIO(), ['_all_deps'])
         dep_dict = {}
         for task in self.task_list:
             if task.name.startswith('_all_deps:'):
@@ -612,6 +651,9 @@ class IncrementalPlugin(object):
         # print
         # print "SUCCESS:", self.success
         # print "FAIL:", self.fail
+
+        if self.task_list is None:
+            return
 
         # FIXME: need to check if all test were executed
         # in case -k is used. by now just consider not all were executed.
