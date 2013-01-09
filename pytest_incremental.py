@@ -180,7 +180,6 @@ class IncrementalTasks(object):
     def __init__(self, py_files):
         self.py_files = py_files
         self.py_mods = ModuleSet(py_files)
-        print "YYYYYYYYYYYY", self.py_files
 
     def gen_watched_files(self):
         """task to be used as a result_dep
@@ -465,7 +464,7 @@ class IncrementalPlugin(object):
                     config.args[0] == os.getcwd()):
                 msg = ("(plugin-incremental) You are required to setup "
                        "--watch-path in order to use the plugin together "
-                       "with an path argument.")
+                       "with a path argument.")
                 raise pytest.UsageError(msg)
             if self.type == "master":
                 msg = ("(plugin-incremental) You are required to setup "
@@ -593,9 +592,7 @@ class IncrementalPlugin(object):
         """create a graph of imports in dot format
         dot -Tpng -o imports.png imports.dot
         """
-        self.task_list = self._load_tasks(self.test_files)
-        doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(), ['get_dep'],
-                 continue_=True, reporter=OutdatedReporter)
+        self._run_doit(self.test_files, StringIO.StringIO(), ['get_dep'])
         dep_dict = {}
         for task in self.task_list:
             if task.name.startswith('get_dep:'):
@@ -641,11 +638,9 @@ class IncrementalPlugin(object):
             config.slaveoutput['test_files'] = self.test_files
             return
         elif self.type == "master":
-            self.task_list = self._load_tasks(self.test_files)
             # we need to make sure task have all calc_dep calculated
-            doit_run(self.DB_FILE, self.task_list, StringIO.StringIO(),
-                     ['outdated'],
-                     continue_=True, reporter=OutdatedReporter)
+            outdated_tasks = ["outdated:%s" % path for path in self.test_files]
+            self._run_doit(self.test_files, StringIO.StringIO(), outdated_tasks)
 
         # debug messages
         # print
