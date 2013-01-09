@@ -177,8 +177,9 @@ class IncrementalTasks(object):
     @ivar py_mods (ModuleSet)
     @ivar py_files (list - str): files being watched for changes
     """
-    def __init__(self, py_files):
-        self.py_files = py_files
+    def __init__(self, py_files, test_files):
+        self.py_files = list(set(py_files + test_files))
+        self.test_files = test_files[:]
         self.py_mods = ModuleSet(py_files)
 
     def gen_watched_files(self):
@@ -197,6 +198,7 @@ class IncrementalTasks(object):
 
     def _get_dep(self, module_path):
         """action: return imports from module as file_dep (for calc_dict)"""
+        #raise Exception(str(self.py_mods.by_path) + '---' + module_path)
         mod = self.py_mods.by_path[module_path]
         self.py_mods.set_imports(mod)
         # filter out imports not being tracked
@@ -258,13 +260,11 @@ class IncrementalTasks(object):
                 'verbosity': 0,
                 }
 
-
-def task_gen():
-    """genrate all tasks"""
-    inc = IncrementalTasks(PY_FILES)
-    yield inc.gen_watched_files()
-    yield inc.gen_deps()
-    yield inc.gen_outdated(TEST_FILES)
+    def create_doit_tasks(self):
+        """magic method used by doit to create tasks """
+        yield self.gen_watched_files()
+        yield self.gen_deps()
+        yield self.gen_outdated(self.test_files)
 
 
 class OutdatedReporter(object):
@@ -295,14 +295,6 @@ class OutdatedReporter(object):
         pass
     def complete_run(self):
         self.outstream.write("%r" % self.outdated)
-
-### XXX remove this crap
-TEST_FILES = []
-PY_FILES = [] # list of files being tracked for changes
-
-def constants(py_files, test_files):
-    PY_FILES[:] = list(set(py_files + test_files))
-    TEST_FILES[:] = test_files
 
 
 ##################### end doit section
@@ -398,14 +390,15 @@ class IncrementalPlugin(object):
 
     def _run_doit(self, test_files, output, sel_tasks):
         """load this file as dodo file to collect tasks"""
-        constants(self.py_files, list(test_files))
+        inc = IncrementalTasks(self.py_files, list(test_files))
         config = {'dep_file': self.DB_FILE,
                   'continue': True,
                   'reporter': OutdatedReporter,
                   'outfile': output,
                   }
-        ctx = globals()
-        ctx['DOIT_CONFIG'] = config
+        ctx = {'tasks_generator': inc,
+               'DOIT_CONFIG': config
+               }
         loader = ModuleTaskLoader(ctx)
         cmd = Run(task_loader=loader)
         cmd.parse_execute(sel_tasks)
@@ -508,23 +501,24 @@ class IncrementalPlugin(object):
     def pytest_collect_file(self, path, parent):
         """collect python files"""
         if (not self.pkg_folders) and path.strpath.endswith('.py'):
-            self.py_files.append(os.path.relpath(path.strpath))
+            self.py_files.append(os.path.abspath(path.strpath))
 
 
     def pytest_collection_modifyitems(self, session, config, items):
         """filter out up-to-date tests"""
         # called on slave only!
-        test_files = set((i.location[0] for i in items))
+        test_files = set((os.path.abspath(i.location[0]) for i in items))
         self.test_files = test_files
         # list dependencies doesnt care about current state of outdated
         if self.list_dependencies or self.graph_dependencies:
             return
         outdated_str = self.get_outdated(test_files)
-        outdated = set(eval(outdated_str))
+        outdated_list = eval(outdated_str)
+        outdated = set(outdated_list)
         selected = []
         deselected = []
         for colitem in items:
-            path = colitem.location[0]
+            path = os.path.abspath(colitem.location[0])
             if path in outdated:
                 selected.append(colitem)
             else:
@@ -563,7 +557,7 @@ class IncrementalPlugin(object):
 
     def print_outdated(self):
         """print list of outdated test files"""
-        uptodate_test_files = set((item.location[0] for item in self.uptodate))
+        uptodate_test_files = set((os.path.abspath(item.location[0]) for item in self.uptodate))
         outdated = []
         for test in self.test_files:
             if test not in uptodate_test_files:
@@ -653,4 +647,5 @@ class IncrementalPlugin(object):
         # FIXME: need to check if all test were executed
         # in case -k is used. by now just consider not all were executed.
         if not getattr(session.config.option, 'keyword', None):
-            self.set_success(list(self.success - self.fail))
+            successful = [os.path.abspath(f) for f in (self.success - self.fail)]
+            self.set_success(successful)
