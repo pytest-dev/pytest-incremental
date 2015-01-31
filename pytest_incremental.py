@@ -1,12 +1,12 @@
 """
 pytest-incremental : an incremental test runner (pytest plugin)
-https://bitbucket.org/schettino72/pytest-incremental
+https://pypi.python.org/pypi/pytest-incremental
 
 The MIT License - see LICENSE file
-Copyright (c) 2011-2013 Eduardo Naufel Schettino
+Copyright (c) 2011-2015 Eduardo Naufel Schettino
 """
 
-__version__ = (0, 3, 0)
+__version__ = (0, 4, 'dev0')
 
 import os
 import ast

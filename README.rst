@@ -140,5 +140,5 @@ Limitations
 Project Details
 ===============
 
- - Project code + issue track on `bitbucket <https://bitbucket.org/schettino72/pytest-incremental>`_
+ - Project code + issue track on `github <https://github.com/pytest-dev/pytest-incremental>`_
  - `Discussion group <http://groups.google.co.in/group/python-doit>`_
