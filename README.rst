@@ -17,9 +17,9 @@ but only the "required" ones.
 
 When talking about build-tools it is common to refer to the terms:
 
- * initial (full) build - all files are compiled
- * incremental build (or partial rebuild) - just changed files are compiled
- * no-op build - no files are compiled (none changed since last execution)
+* initial (full) build - all files are compiled
+* incremental build (or partial rebuild) - just changed files are compiled
+* no-op build - no files are compiled (none changed since last execution)
 
 So an "incremental test runner" will only re-execute tests that were affected
 by changes in the source code since last successful execution.
@@ -57,7 +57,7 @@ local installation
 --------------------
 
 You can also just grab the plug-in
-`module <https://bitbucket.org/schettino72/pytest-incremental/src/tip/pytest_incremental.py>`_
+`module <https://raw.githubusercontent.com/pytest-dev/pytest-incremental/master/pytest_incremental.py>`_
 file and put in your project path.
 Then enable it (check `pytest docs <http://pytest.org/plugins.html#requiring-loading-plugins-in-a-test-module-or-conftest-file>`_).
 
@@ -128,13 +128,18 @@ You can also check what are the outdated tests without executing them::
 Limitations
 ==============
 
-``pytest-incremental`` looks for imports recursively to find dependencies (using AST). But given the very dynamic nature of python there are still some cases that a module can be affected by a module that are not detected.
+``pytest-incremental`` looks for imports recursively to find dependencies (using
+AST). But given the very dynamic nature of python there are still some cases
+that a module can be affected by a module that are not detected.
 
- * `from package import *` modules imported from __all__ in a package are not counted as a dependency
- * modules imported not using the *import* statement
- * modules not explicitly imported but used at run-time (i.e. conftest.py when running your tests with pytest)
- * monkey-patching. (i.e. A imports X.  B monkey-patches X. In this case A might depend on B)
- * others ?
+* `from package import *` modules imported from __all__ in a package are not
+  counted as a dependency
+* modules imported not using the *import* statement
+* modules not explicitly imported but used at run-time (i.e. conftest.py when
+  running your tests with pytest)
+* monkey-patching. (i.e. A imports X.  B monkey-patches X. In this case A might
+  depend on B)
+* others ?
 
 
 Project Details

@@ -1,6 +1,6 @@
 from distutils.core import setup
 
-_readme = open('README', 'r')
+_readme = open('README.rst', 'r')
 README_TEXT = _readme.read()
 _readme.close()
 
