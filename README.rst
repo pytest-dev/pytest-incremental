@@ -59,7 +59,7 @@ local installation
 You can also just grab the plug-in
 `module <https://raw.githubusercontent.com/pytest-dev/pytest-incremental/master/pytest_incremental.py>`_
 file and put in your project path.
-Then enable it (check `pytest docs <http://pytest.org/plugins.html#requiring-loading-plugins-in-a-test-module-or-conftest-file>`_).
+Then enable it (check `pytest docs <http://pytest.org/latest/plugins.html#conftest-py-local-per-directory-plugins>`_).
 
 
 Usage

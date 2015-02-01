@@ -6,12 +6,24 @@ The MIT License - see LICENSE file
 Copyright (c) 2011-2015 Eduardo Naufel Schettino
 """
 
+from __future__ import print_function
+from __future__ import unicode_literals
+
 __version__ = (0, 4, 'dev0')
 
 import os
 import ast
-import StringIO
 import fcntl
+
+try:
+    # PY 3
+    import io
+    StringIO = io.StringIO
+except ImportError: # pragma: no cover
+    # PY 2
+    import StringIO
+    StringIO = StringIO.StringIO
+
 
 from doit.dependency import Dependency
 from doit.cmd_base import ModuleTaskLoader
@@ -60,13 +72,17 @@ def find_imports(file_path):
 ############## process module imports
 
 class _PyModule(object):
-    """Represents a python module. Can find imported modules
+    """Represents a python module
+
+    :path: (str) path to module
+    :ivar: fqn (list - str) full qualified name as list of strings
     """
     def __init__(self, path):
         self.path = path
-        self.name = self.get_namespace(path)
-        self.imports = None # list of module names
-        self.pkg = self.is_pkg(path)
+        self.fqn = self._get_fqn(path)
+
+    def __repr__(self): # pragma: no cover
+        return "<_PyModule %s>" % self.path
 
     @staticmethod
     def is_pkg(path):
@@ -74,50 +90,44 @@ class _PyModule(object):
                 os.path.exists(os.path.join(path, '__init__.py')))
 
     @classmethod
-    def get_namespace(cls, path):
-        """get package or module full name
-        @return list of names
+    def _get_fqn(cls, path):
+        """get full qualified name as list of strings
+        @return list (str) of path segments from top package to given path
         """
         name_list = []
         current_path = os.path.basename(path)
         if current_path.endswith('.py'):
             current_path = current_path[:-3]
         parent_path = os.path.dirname(path)
+        # move to parent path until parent path is a python package
         while True:
             name_list.append(current_path)
             if not cls.is_pkg(parent_path):
-                name_list.reverse()
-                return name_list
+                break
             current_path = os.path.basename(parent_path)
             parent_path = os.path.dirname(parent_path)
+        name_list.reverse()
+        return name_list
 
-    def add_import(self, module):
-        """add another module as import
-        @param module: (_PyModule)
-        """
-        self.imports.add(module.path)
-
-    def __repr__(self): # pragma: no cover
-        return "<_PyModule %s>" % self.path
 
 
 class ModuleSet(object):
     """helper to filter import list only from within packages"""
     def __init__(self, path_list):
-        self.pkgs = set()
+        self.pkgs = set() # str of fqn (dot separed)
         self.by_path = {} # module by path
         self.by_name = {} # module by name (dot separated)
 
         for path in path_list:
             # create modules object
             mod = _PyModule(path)
-            if mod.name[-1] == '__init__':
-                self.pkgs.add('.'.join(mod.name[:-1]))
+            if mod.fqn[-1] == '__init__':
+                self.pkgs.add('.'.join(mod.fqn[:-1]))
             self.by_path[path] = mod
-            self.by_name['.'.join(mod.name)] = mod
+            self.by_name['.'.join(mod.fqn)] = mod
 
 
-    def _get_imported_module(self, module_name):
+    def _get_imported_module(self, module_name, relative_guess=''):
         """try to get imported module reference by its name"""
         # if imported module on module_set add to list
         imp_mod = self.by_name.get(module_name)
@@ -127,6 +137,9 @@ class ModuleSet(object):
         # last part of import section might not be a module
         # remove last section
         only = module_name.rsplit('.', 1)[0]
+        # when removing last section, need to remove relative_guess to
+        # avoid importing its own package
+        only = only[len(relative_guess):]
         imp_mod2 = self.by_name.get(only)
         if imp_mod2:
             return imp_mod2
@@ -140,33 +153,37 @@ class ModuleSet(object):
             return self.by_name[pkg_name]
 
 
-    def set_imports(self, module):
-        """set imports for module"""
-        module.imports = set()
+    def get_imports(self, module):
+        """return set of imported modules that are in self
+        :param module: _PyModule
+        :return: (set - str) of path names
+        """
+        module_pkg = '.'.join(module.fqn[:-1])
+        imports = set()
         raw_imports = find_imports(module.path)
         for import_entry in raw_imports:
-            try_names = []
             # join 'from' and 'import' part of import statement
             full = ".".join(s for s in import_entry[:2] if s)
 
             import_level = import_entry[3]
             if import_level:
                 # intra package imports
-                intra = '.'.join(module.name[:-import_level] + [full])
-                try_names = (intra,)
+                intra = '.'.join(module.fqn[:-import_level] + [full])
+                imported = self._get_imported_module(intra)
+                if imported:
+                    imports.add(imported.path)
+
             else:
                 # deal with old-style relative imports
-                module_pkg = '.'.join(module.name[:-1])
                 full_relative = "%s.%s" % (module_pkg, full)
-                try_names = (full_relative, full,)
-
-            for imported_name in try_names:
-                imported = self._get_imported_module(imported_name)
+                imported = self._get_imported_module(full_relative, module_pkg)
                 if imported:
-                    module.add_import(imported)
-                    break
-
-            # didnt find... must be out of tracked namespaces
+                    imports.add(imported.path)
+                else:
+                    imported = self._get_imported_module(full)
+                    if imported:
+                        imports.add(imported.path)
+        return imports
 
 
 ######### start doit section
@@ -180,7 +197,7 @@ class IncrementalTasks(object):
     def __init__(self, py_files, test_files):
         self.py_files = list(set(py_files + test_files))
         self.test_files = test_files[:]
-        self.py_mods = ModuleSet(py_files)
+        self.py_mods = ModuleSet(self.py_files)
 
     def gen_watched_files(self):
         """task to be used as a result_dep
@@ -199,9 +216,9 @@ class IncrementalTasks(object):
     def _get_dep(self, module_path):
         """action: return imports from module as file_dep (for calc_dict)"""
         mod = self.py_mods.by_path[module_path]
-        self.py_mods.set_imports(mod)
+        imports = self.py_mods.get_imports(mod)
         # filter out imports not being tracked
-        return {'file_dep': [dep for dep in mod.imports if dep in self.py_files]}
+        return {'file_dep': [dep for dep in imports if dep in self.py_files]}
 
 
     @staticmethod
@@ -415,7 +432,7 @@ class IncrementalPlugin(object):
             lock_fd = open(lock_file, 'w')
             fcntl.lockf(lock_fd, fcntl.LOCK_EX)
         try:
-            output = StringIO.StringIO()
+            output = StringIO()
             outdated_tasks = ["outdated:%s" % path for path in test_files]
             self._run_doit(test_files, output, outdated_tasks)
         finally:
@@ -550,9 +567,9 @@ class IncrementalPlugin(object):
         """print info on up-to-date tests"""
         uptodate_test_files = set((item.location[0] for item in self.uptodate))
         if uptodate_test_files:
-            print
+            print()
         for test_file in sorted(uptodate_test_files):
-            print "%s  [up-to-date]" % test_file
+            print("{}  [up-to-date]".format(test_file))
 
     def print_outdated(self):
         """print list of outdated test files"""
@@ -562,30 +579,30 @@ class IncrementalPlugin(object):
             if test not in uptodate_test_files:
                 outdated.append(test)
 
-        print
+        print()
         if outdated:
-            print "List of outdated test files:"
+            print("List of outdated test files:")
             for test in sorted(outdated):
-                print test
+                print(test)
         else:
-            print "All test files are up to date"
+            print("All test files are up to date")
 
 
     def print_deps(self):
         """print list of all python modules being tracked and its dependencies"""
-        self._run_doit(self.test_files, StringIO.StringIO(), ['_all_deps'])
+        self._run_doit(self.test_files, StringIO(), ['_all_deps'])
         dep_dict = {}
         for task in self.task_list:
             if task.name.startswith('_all_deps:'):
                 dep_dict[task.name[10:]] = sorted(task.file_dep)
         for name in sorted(dep_dict):
-            print "%s: %s" % (name, ", ".join(dep_dict[name]))
+            print("{}: {}".format(name, ", ".join(dep_dict[name])))
 
     def create_dot_graph(self):
         """create a graph of imports in dot format
         dot -Tpng -o imports.png imports.dot
         """
-        self._run_doit(self.test_files, StringIO.StringIO(), ['get_dep'])
+        self._run_doit(self.test_files, StringIO(), ['get_dep'])
         dep_dict = {}
         for task in self.task_list:
             if task.name.startswith('get_dep:'):
@@ -633,12 +650,12 @@ class IncrementalPlugin(object):
         elif self.type == "master":
             # we need to make sure task have all calc_dep calculated
             outdated_tasks = ["outdated:%s" % path for path in self.test_files]
-            self._run_doit(self.test_files, StringIO.StringIO(), outdated_tasks)
+            self._run_doit(self.test_files, StringIO(), outdated_tasks)
 
         # debug messages
         # print
-        # print "SUCCESS:", self.success
-        # print "FAIL:", self.fail
+        # print("SUCCESS:", self.success)
+        # print("FAIL:", self.fail)
 
         if self.task_list is None:
             return
