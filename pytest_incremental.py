@@ -14,6 +14,8 @@ __version__ = (0, 4, 'dev0')
 import os
 import ast
 import fcntl
+import json
+from collections import deque
 
 try:
     # PY 3
@@ -25,10 +27,11 @@ except ImportError: # pragma: no cover
     StringIO = StringIO.StringIO
 
 
+from doit.task import Task, DelayedLoader
 from doit.dependency import Dependency
 from doit.cmd_base import ModuleTaskLoader
 from doit.cmd_run import Run
-from doit.tools import result_dep
+from doit.tools import config_changed
 
 ############# find imports using AST
 
@@ -186,6 +189,107 @@ class ModuleSet(object):
         return imports
 
 
+######### Graph implementation
+
+class GNode(object):
+    def __init__(self, name):
+        self.name = name
+        self.deps = set() # of direct GNode deps
+        # all_deps are lazily calculated and cached
+        self._all_deps = None # set of all (recursive) deps names
+        # when a cyclic dependency is found copy_from indicated
+        # which GNode depepencies should be copied from (all nodes
+        # in a cycle have the same set of dependencies)
+        self.copy_from = None
+
+    def __repr__(self):
+        return "<GNode({})>".format(self.name)
+
+    def add_dep(self, dep):
+        """add a dependency of self"""
+        self.deps.add(dep)
+
+    def all_deps(self, stack=None):
+        """return set of GNode with all deps from this node (including self)"""
+        # return value if already calculated
+        if self._all_deps is not None:
+            return self._all_deps
+
+        # stack is used to detect cyclic dependencies
+        if stack is None:
+            stack = set()
+
+        stack.add(self)
+        deps = set([self]) # keep track of all deps
+        to_process = deque(self.deps) # deps found but not processed yet
+        # recursive descend to all deps
+        while to_process:
+            node = to_process.popleft()
+            deps.add(node)
+            # cycle detected, copy dependencies from the first node in the cycle
+            if node in stack:
+                self.copy_from = node
+                continue
+            # if node in cycle that was already processed, skip
+            if node.copy_from and node.copy_from in deps:
+                continue
+            # recursive add deps
+            for got in node.all_deps(stack):
+                if got not in deps:
+                    to_process.append(got)
+
+        stack.remove(self)
+
+        # node deps will be copied but need to return deps out of cycle
+        if self.copy_from:
+            return deps
+
+        self._all_deps = deps
+        # finish processing of a sub-tree, set all copies
+        if not stack:
+            for node in deps:
+                if node.copy_from:
+                    node._all_deps = node.copy_from._all_deps
+                    node.copy_from = None
+        return self._all_deps
+
+
+class DepGraph(object):
+    NODE_CLASS = GNode
+    def __init__(self, dep_dict):
+        """
+        :param dep_dict: (dict) key: (str) node name
+                                value: (list - str) direct deps
+        """
+        self.nodes = {}
+        for name, deps in dep_dict.items():
+            node = self._node(name)
+            for dep in deps:
+                node.add_dep(self._node(dep))
+
+    def _node(self, name):
+        """get or create node"""
+        node = self.nodes.get(name, None)
+        if not node:
+            node = self.nodes[name] = self.NODE_CLASS(name)
+        return node
+
+
+    def write_dot(self, stream):
+        """write dot file
+        @param info_list
+        """
+        stream.write("digraph imports {\n")
+        for node in self.nodes.values():
+            if node.name.startswith('test'):
+                continue
+            for dep in node.deps:
+                stream.write("%s -> %s\n" % (
+                    node.name.replace('/', '_').replace('.', '_'),
+                    dep.name.replace('/', '_').replace('.', '_')))
+        stream.write("}\n")
+
+
 ######### start doit section
 
 class IncrementalTasks(object):
@@ -199,40 +303,27 @@ class IncrementalTasks(object):
         self.test_files = test_files[:]
         self.py_mods = ModuleSet(self.py_files)
 
-    def gen_watched_files(self):
-        """task to be used as a result_dep
-
-        Result contains a list of modules with tests.
-
-        This is required because list of imports per module will be filtered
-        out based on this value.
-        """
-        yield {
-            'basename': 'watched_files',
-            'actions': [ (lambda fl: str(sorted(fl)), [self.py_files]) ]
-            }
-
 
     def _get_dep(self, module_path):
-        """action: return imports from module as file_dep (for calc_dict)"""
+        """action: return list of directed imported modules"""
         mod = self.py_mods.by_path[module_path]
-        imports = self.py_mods.get_imports(mod)
-        # filter out imports not being tracked
-        return {'file_dep': [dep for dep in imports if dep in self.py_files]}
+        return {'imports': list(self.py_mods.get_imports(mod))}
 
+
+    def write_json_deps(self, imports):
+        result = {k: v['imports'] for k,v in imports.items()}
+        with open('deps.json', 'w') as fp:
+            json.dump(result, fp)
 
     @staticmethod
-    def _acc_dep(mod, dependencies):
-        """action: get direct and indirect dependencies"""
-        acc = ["acc_dep:%s" %m for m in dependencies]
-        return {
-            'calc_dep': acc,
-            'file_dep': list(dependencies)
-            }
+    def write_dot(file_name, graph):
+        with open(file_name, "w") as fp:
+            graph.write_dot(fp)
 
 
     def gen_deps(self):
         """get direct dependencies for each module"""
+        watched_modules = str(list(sorted(self.py_files)))
         for mod in self.py_files:
             # direct dependencies
             yield {
@@ -240,47 +331,64 @@ class IncrementalTasks(object):
                 'name': mod,
                 'actions':[(self._get_dep, [mod])],
                 'file_dep': [mod],
-                'uptodate': [result_dep('watched_files')],
+                'uptodate': [config_changed(watched_modules)],
                 }
+        yield {
+            'basename': 'dep-json',
+            'actions': [self.write_json_deps],
+            'getargs': {'imports': ('get_dep', None)},
+            'targets': ['deps.json'],
+        }
 
-            # accumulated dependencies
+        # FIXME extract this into a helper function
+        loader = DelayedLoader(self.gen_print_deps, executed='dep-json')
+        yield Task('print-deps', None, loader=loader)
+
+    def gen_print_deps(self):
+        with open('deps.json') as fp:
+            deps = json.load(fp)
+        graph = DepGraph(deps)
+        for node in graph.nodes.values():
             yield {
-                'basename': 'acc_dep',
-                'name': mod,
-                'actions': [(self._acc_dep, [mod])],
-                'file_dep': [mod],
-                'calc_dep': ["get_dep:%s" % mod],
-                'uptodate': [result_dep('watched_files')],
-                }
+                'basename': 'print-deps',
+                'name': node.name,
+                'actions': [(lambda node: print(node.all_deps()), [node])],
+                'verbosity': 2,
+            }
 
-            # dumb task just to make it easy to
-            # retrieve all file_dep (recursivelly)
-            yield {
-                'basename': '_all_deps',
-                'name': mod,
-                'actions': None,
-                'file_dep': [mod],
-                'calc_dep': ["acc_dep:%s" % mod],
-                'verbosity': 0,
-                }
 
-    def gen_outdated(self, test_files):
-        """find which tests are not up-to-date"""
-        for test in test_files:
+        yield {
+            'basename': 'print-deps',
+            'name': 'dot',
+            'actions': [(self.write_dot, ['deps.dot', graph])],
+            'file_dep': ['deps.json'],
+            'targets': ['deps.dot'],
+        }
+
+        yield {
+            'basename': 'print-deps',
+            'name': 'jpeg',
+            'actions': ["dot -Tpng -o %(targets)s %(dependencies)s"],
+            'file_dep': ['deps.dot'],
+            'targets': ["deps.png"],
+        }
+
+
+        # generate tasks used by py.test to save successful results
+        for test in self.test_files:
             yield {
                 'basename': 'outdated',
                 'name': test,
                 'actions': [lambda : False], # always fail if executed
-                'file_dep': [test],
-                'calc_dep': ["acc_dep:%s" % test],
+                'file_dep': [n.name for n in graph.nodes[test].all_deps()],
                 'verbosity': 0,
                 }
 
     def create_doit_tasks(self):
         """magic method used by doit to create tasks """
-        yield self.gen_watched_files()
         yield self.gen_deps()
-        yield self.gen_outdated(self.test_files)
+
+
 
 
 class OutdatedReporter(object):
