@@ -15,6 +15,7 @@ import os
 import ast
 import fcntl
 import json
+import functools
 from collections import deque
 
 try:
@@ -44,7 +45,7 @@ def _file2ast(file_name):
 
 class _ImportsFinder(ast.NodeVisitor):
     """find all imports
-    @ivar imports: (list - tuple) (module, name, asname, level)
+    :ivar imports: (list - tuple) (module, name, asname, level)
     """
     def __init__(self):
         ast.NodeVisitor.__init__(self)
@@ -64,7 +65,7 @@ class _ImportsFinder(ast.NodeVisitor):
 
 def find_imports(file_path):
     """get list of import from python module
-    @return: (list - tuple) (module, name, asname, level)
+    :return: (list - tuple) (module, name, asname, level)
     """
     mod_ast = _file2ast(file_path)
     finder = _ImportsFinder()
@@ -95,7 +96,7 @@ class _PyModule(object):
     @classmethod
     def _get_fqn(cls, path):
         """get full qualified name as list of strings
-        @return list (str) of path segments from top package to given path
+        :return: (list - str) of path segments from top package to given path
         """
         name_list = []
         current_path = os.path.basename(path)
@@ -277,7 +278,7 @@ class DepGraph(object):
 
     def write_dot(self, stream):
         """write dot file
-        @param info_list
+        :param stream: Any object with a `write()` method
         """
         stream.write("digraph imports {\n")
         for node in self.nodes.values():
@@ -292,37 +293,60 @@ class DepGraph(object):
 
 ######### start doit section
 
-class IncrementalTasks(object):
-    """generate doit tasks used by pytest-incremental
+def gen_after(name, after_task):
+    def decorated(fn_creator):
+        """yield DelayedTasks executed after `after_task` is executed"""
+        def task_creator(self):
+            creator = functools.partial(fn_creator, self)
+            loader = DelayedLoader(creator, executed=after_task)
+            return Task(name, None, loader=loader)
+        return task_creator
+    return decorated
 
-    @ivar py_mods (ModuleSet)
-    @ivar py_files (list - str): files being watched for changes
+class PyTasks(object):
+    """generate doit tasks related to python modules import dependencies
+
+    :ivar ModuleSet py_mods:
+    :ivar py_files: (list - str) files being watched for changes
     """
     def __init__(self, py_files, test_files):
         self.py_files = list(set(py_files + test_files))
         self.test_files = test_files[:]
         self.py_mods = ModuleSet(self.py_files)
+        self._graph = None # DepGraph cached on first use
+
+    @property
+    def graph(self):
+        if self._graph is not None:
+            return self._graph
+        with open('deps.json') as fp:
+            deps = json.load(fp)
+        self._graph = DepGraph(deps)
+        return self._graph
 
 
     def _get_dep(self, module_path):
-        """action: return list of directed imported modules"""
+        """action: return list of direct imports from a single py module
+
+        :return dict: single value 'imports', value set of str file paths
+        """
         mod = self.py_mods.by_path[module_path]
         return {'imports': list(self.py_mods.get_imports(mod))}
 
 
-    def write_json_deps(self, imports):
+    def write_json_deps(self, imports, file_path='deps.json'):
+        """write JSON file with direct imports of all modules"""
         result = {k: v['imports'] for k,v in imports.items()}
-        with open('deps.json', 'w') as fp:
+        with open(file_path, 'w') as fp:
             json.dump(result, fp)
 
-    @staticmethod
-    def write_dot(file_name, graph):
-        with open(file_name, "w") as fp:
-            graph.write_dot(fp)
-
-
     def gen_deps(self):
-        """get direct dependencies for each module"""
+        """generate doit tasks to find imports
+
+        generated tasks:
+            * get_dep:<path> => find imported moudules
+            * dep-json => save import info in a JSON file
+        """
         watched_modules = str(list(sorted(self.py_files)))
         for mod in self.py_files:
             # direct dependencies
@@ -336,19 +360,16 @@ class IncrementalTasks(object):
         yield {
             'basename': 'dep-json',
             'actions': [self.write_json_deps],
+            'task_dep': ['get_dep'],
             'getargs': {'imports': ('get_dep', None)},
             'targets': ['deps.json'],
+            'doc': 'save dep info in deps.json',
         }
 
-        # FIXME extract this into a helper function
-        loader = DelayedLoader(self.gen_print_deps, executed='dep-json')
-        yield Task('print-deps', None, loader=loader)
 
+    @gen_after('print-deps', 'dep-json')
     def gen_print_deps(self):
-        with open('deps.json') as fp:
-            deps = json.load(fp)
-        graph = DepGraph(deps)
-        for node in graph.nodes.values():
+        for node in self.graph.nodes.values():
             yield {
                 'basename': 'print-deps',
                 'name': node.name,
@@ -357,16 +378,27 @@ class IncrementalTasks(object):
             }
 
 
+
+    @staticmethod
+    def write_dot(file_name, graph):
+        """write a dot-file(graphviz) with import relation of modules"""
+        with open(file_name, "w") as fp:
+            graph.write_dot(fp)
+
+
+    @gen_after('dep-graph', 'dep-json')
+    def gen_dep_graph(self):
+        """generate tasks for creating a `dot` graph of module imports"""
         yield {
-            'basename': 'print-deps',
+            'basename': 'dep-graph',
             'name': 'dot',
-            'actions': [(self.write_dot, ['deps.dot', graph])],
+            'actions': [(self.write_dot, ['deps.dot', self.graph])],
             'file_dep': ['deps.json'],
             'targets': ['deps.dot'],
         }
 
         yield {
-            'basename': 'print-deps',
+            'basename': 'dep-graph',
             'name': 'jpeg',
             'actions': ["dot -Tpng -o %(targets)s %(dependencies)s"],
             'file_dep': ['deps.dot'],
@@ -374,7 +406,14 @@ class IncrementalTasks(object):
         }
 
 
-        # generate tasks used by py.test to save successful results
+
+
+class IncrementalTasks(PyTasks):
+    """auxiliary tasks for pytest-incremental"""
+    @gen_after('outdated', 'dep-json')
+    def gen_outdated(self):
+        """generate tasks used by py.test to keep-track of successful results"""
+        graph = self.graph
         for test in self.test_files:
             yield {
                 'basename': 'outdated',
@@ -385,9 +424,10 @@ class IncrementalTasks(object):
                 }
 
     def create_doit_tasks(self):
-        """magic method used by doit to create tasks """
         yield self.gen_deps()
-
+        yield self.gen_print_deps()
+        yield self.gen_dep_graph()
+        yield self.gen_outdated()
 
 
 
@@ -402,7 +442,7 @@ class OutdatedReporter(object):
         if task.name.startswith('outdated:'):
             self.outdated.append(task.name.split(':',1)[1])
     def add_failure(self, task, exception):
-        if task.name.startswith('outdated:'):
+        if task.name.startswith('outdated'):
             return
         raise pytest.UsageError("%s:%s" % (task.name, exception))
     def add_success(self, task):
@@ -470,13 +510,13 @@ def pytest_unconfigure(config):
 class IncrementalPlugin(object):
     """pytest-incremental plugin class
 
-    @cvar DB_FILE: (str) file name used as doit db file
-    @ivar tasks: (dict) with reference to doit tasks
-    @ivar py_files: (list - str) relative path of test and code under test
-    @ivar success: (list - str) path of test files (of tests that succeed)
-    @ivar fail: (list - str) path of test files (of tests that failed)
-    @ivar uptodate: (list - pytest.Item) wont be executed
-    @ivar pkg_folders
+    :cvar str DB_FILE: file name used as doit db file
+    :ivar dict tasks: with reference to doit tasks
+    :ivar py_files: (list - str) relative path of test and code under test
+    :ivar success: (list - str) path of test files (of tests that succeed)
+    :ivar fail: (list - str) path of test files (of tests that failed)
+    :ivar uptodate: (list - pytest.Item) wont be executed
+    :ivar pkg_folders:
 
     how it works
     =============
@@ -541,7 +581,8 @@ class IncrementalPlugin(object):
             fcntl.lockf(lock_fd, fcntl.LOCK_EX)
         try:
             output = StringIO()
-            outdated_tasks = ["outdated:%s" % path for path in test_files]
+            #outdated_tasks = ["outdated:%s" % path for path in test_files]
+            outdated_tasks = ['outdated']
             self._run_doit(test_files, output, outdated_tasks)
         finally:
             if self.type == 'slave':
@@ -768,8 +809,7 @@ class IncrementalPlugin(object):
         if self.task_list is None:
             return
 
-        # FIXME: need to check if all test were executed
-        # in case -k is used. by now just consider not all were executed.
-        if not getattr(session.config.option, 'keyword', None):
-            successful = [os.path.abspath(f) for f in (self.success - self.fail)]
-            self.set_success(successful)
+        # FIXME: change the way success/failures are saved
+        # if not getattr(session.config.option, 'keyword', None):
+        #     successful = [os.path.abspath(f) for f in (self.success - self.fail)]
+        #     self.set_success(successful)
