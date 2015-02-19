@@ -285,9 +285,7 @@ class DepGraph(object):
             if node.name.startswith('test'):
                 continue
             for dep in node.deps:
-                stream.write("%s -> %s\n" % (
-                    node.name.replace('/', '_').replace('.', '_'),
-                    dep.name.replace('/', '_').replace('.', '_')))
+                stream.write('"%s" -> "%s"\n' % (node.name, dep.name))
         stream.write("}\n")
 
 
@@ -308,8 +306,11 @@ class PyTasks(object):
 
     :ivar ModuleSet py_mods:
     :ivar py_files: (list - str) files being watched for changes
+    :ivar json_file str: name of intermediate file with import info from all
+                         modules
     """
-    def __init__(self, py_files, test_files):
+    def __init__(self, py_files, test_files, json_file='deps.json'):
+        self.json_file = json_file
         self.py_files = list(set(py_files + test_files))
         self.test_files = test_files[:]
         self.py_mods = ModuleSet(self.py_files)
@@ -317,11 +318,11 @@ class PyTasks(object):
 
     @property
     def graph(self):
-        if self._graph is not None:
-            return self._graph
-        with open('deps.json') as fp:
-            deps = json.load(fp)
-        self._graph = DepGraph(deps)
+        """create Graph from json file"""
+        if self._graph is None:
+            with open(self.json_file) as fp:
+                deps = json.load(fp)
+            self._graph = DepGraph(deps)
         return self._graph
 
 
@@ -334,10 +335,10 @@ class PyTasks(object):
         return {'imports': list(self.py_mods.get_imports(mod))}
 
 
-    def write_json_deps(self, imports, file_path='deps.json'):
+    def write_json_deps(self, imports):
         """write JSON file with direct imports of all modules"""
         result = {k: v['imports'] for k,v in imports.items()}
-        with open(file_path, 'w') as fp:
+        with open(self.json_file, 'w') as fp:
             json.dump(result, fp)
 
     def gen_deps(self):
@@ -357,13 +358,17 @@ class PyTasks(object):
                 'file_dep': [mod],
                 'uptodate': [config_changed(watched_modules)],
                 }
+
+        # Create an intermediate json file with import information.
+        # It is required to create an intermediate file because DelayedTasks
+        # can not have get_args to use values from other tasks.
         yield {
             'basename': 'dep-json',
             'actions': [self.write_json_deps],
             'task_dep': ['get_dep'],
             'getargs': {'imports': ('get_dep', None)},
-            'targets': ['deps.json'],
-            'doc': 'save dep info in deps.json',
+            'targets': [self.json_file],
+            'doc': 'save dep info in {}'.format(self.json_file),
         }
 
 
@@ -387,22 +392,22 @@ class PyTasks(object):
 
 
     @gen_after('dep-graph', 'dep-json')
-    def gen_dep_graph(self):
+    def gen_dep_graph(self, dot_file='deps.dot', png_file='deps.png'):
         """generate tasks for creating a `dot` graph of module imports"""
         yield {
             'basename': 'dep-graph',
             'name': 'dot',
             'actions': [(self.write_dot, ['deps.dot', self.graph])],
-            'file_dep': ['deps.json'],
-            'targets': ['deps.dot'],
+            'file_dep': [self.json_file],
+            'targets': [dot_file],
         }
 
         yield {
             'basename': 'dep-graph',
             'name': 'jpeg',
             'actions': ["dot -Tpng -o %(targets)s %(dependencies)s"],
-            'file_dep': ['deps.dot'],
-            'targets': ["deps.png"],
+            'file_dep': [dot_file],
+            'targets': [png_file],
         }
 
 

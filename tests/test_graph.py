@@ -103,10 +103,10 @@ class Test_DepGraph(object):
         output = StringIO()
         self.graph.write_dot(output)
         lines = output.getvalue().splitlines()
-        assert "a -> c" in lines
-        assert "a -> b" in lines
-        assert "b -> d" in lines
-        assert "d -> c" in lines
-        assert "d -> e" in lines
+        assert '"a" -> "c"' in lines
+        assert '"a" -> "b"' in lines
+        assert '"b" -> "d"' in lines
+        assert '"d" -> "c"' in lines
+        assert '"d" -> "e"' in lines
 
 
