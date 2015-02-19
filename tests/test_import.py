@@ -5,7 +5,7 @@ import os
 from pytest_incremental import find_imports, _PyModule, ModuleSet
 
 # list of modules in sample folder used for testing
-sample_dir = os.path.join(os.path.dirname(__file__), 'sample')
+sample_dir = os.path.join(os.path.dirname(__file__), 'sample-import')
 class FOO:
     pkg = os.path.join(sample_dir, 'foo')
     init = os.path.join(pkg, '__init__.py')
