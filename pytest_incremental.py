@@ -372,13 +372,18 @@ class PyTasks(object):
         }
 
 
+    @staticmethod
+    def print_dependencies(node):
+        node_list = sorted(n.name for n in node.all_deps())
+        print('{}: {}'.format(node.name, ', '.join(node_list)))
+
     @gen_after('print-deps', 'dep-json')
     def gen_print_deps(self):
         for node in self.graph.nodes.values():
             yield {
                 'basename': 'print-deps',
                 'name': node.name,
-                'actions': [(lambda node: print(node.all_deps()), [node])],
+                'actions': [(self.print_dependencies, [node])],
                 'verbosity': 2,
             }
 
