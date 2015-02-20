@@ -1,2 +1,3 @@
 six
 pytest
+doit >= 0.28.dev0

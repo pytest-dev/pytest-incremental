@@ -23,7 +23,11 @@ setup(name = 'pytest-incremental',
                      'Topic :: Software Development :: Testing',
                      ],
       py_modules = ['pytest_incremental'],
-      install_requires = ['doit', 'pytest', 'pytest-xdist'],
+      install_requires = [
+          'doit >= 0.27.0',
+          'pytest',
+          'pytest-xdist',
+      ],
       entry_points = {
         'pytest11': ['pytest_incremental = pytest_incremental'],
         },
