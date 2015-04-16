@@ -46,8 +46,8 @@ SAMPLE_DIR = os.path.join(os.path.dirname(__file__), 'sample-inc')
 @pytest.fixture
 def cmd_run(request, depfile_name):
     output = StringIO()
-    cmd = Run(DodoTaskLoader())
-    params, _ = CmdParse(cmd.options).parse([])
+    cmd = Run(task_loader=DodoTaskLoader())
+    params, _ = cmd.cmdparser.parse([])
     params['outfile'] = output
     params['dodoFile'] = os.path.join(SAMPLE_DIR, 'dodo.py')
     params['cwdPath'] = SAMPLE_DIR
