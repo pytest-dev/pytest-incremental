@@ -32,15 +32,16 @@ from doit.task import Task, DelayedLoader
 from doit.dependency import Dependency
 from doit.cmd_base import ModuleTaskLoader
 from doit.cmd_run import Run
+from doit.reporter import ZeroReporter
+from doit import doit_cmd
 from doit.tools import config_changed
 
 ############# find imports using AST
 
 def _file2ast(file_name):
     """get ast-tree from file_name"""
-    fp = open(file_name, 'r')
-    text = fp.read()
-    fp.close()
+    with open(file_name, 'r') as fp:
+        text = fp.read()
     return ast.parse(text, file_name)
 
 class _ImportsFinder(ast.NodeVisitor):
@@ -90,6 +91,7 @@ class _PyModule(object):
 
     @staticmethod
     def is_pkg(path):
+        """return True if path is a python package"""
         return (os.path.isdir(path) and
                 os.path.exists(os.path.join(path, '__init__.py')))
 
@@ -193,6 +195,11 @@ class ModuleSet(object):
 ######### Graph implementation
 
 class GNode(object):
+    '''represents a node in a direct graph
+
+    Designed to efficiently return a list of all nodes in a sub-graph.
+    The sub-graph from each node is built on demand and cached after built.
+    '''
     def __init__(self, name):
         self.name = name
         self.deps = set() # of direct GNode deps
@@ -256,6 +263,7 @@ class GNode(object):
 
 
 class DepGraph(object):
+    '''A direct graph used to track python module dependencies'''
     NODE_CLASS = GNode
     def __init__(self, dep_dict):
         """
@@ -282,24 +290,33 @@ class DepGraph(object):
         """
         stream.write("digraph imports {\n")
         for node in self.nodes.values():
-            if node.name.startswith('test'):
-                continue
-            for dep in node.deps:
-                stream.write('"%s" -> "%s"\n' % (node.name, dep.name))
+            # FIXME add option to include test files or not
+            #if node.name.startswith('test'):
+            #    continue
+            node_path = os.path.relpath(node.name)
+            if node.deps:
+                for dep in node.deps:
+                    dep_path = os.path.relpath(dep.name)
+                    stream.write('"{}" -> "{}"\n'.format(node_path, dep_path))
+            else:
+                stream.write('"{}"\n'.format(node_path))
         stream.write("}\n")
 
 
 ######### start doit section
 
 def gen_after(name, after_task):
+    '''decorator for function creating a DelayedTask'''
     def decorated(fn_creator):
         """yield DelayedTasks executed after `after_task` is executed"""
         def task_creator(self):
+            '''create a Task setting its loader'''
             creator = functools.partial(fn_creator, self)
             loader = DelayedLoader(creator, executed=after_task)
             return Task(name, None, loader=loader)
         return task_creator
     return decorated
+
 
 class PyTasks(object):
     """generate doit tasks related to python modules import dependencies
@@ -309,10 +326,9 @@ class PyTasks(object):
     :ivar json_file str: name of intermediate file with import info from all
                          modules
     """
-    def __init__(self, py_files, test_files, json_file='deps.json'):
+    def __init__(self, py_files, json_file='deps.json'):
         self.json_file = json_file
-        self.py_files = list(set(py_files + test_files))
-        self.test_files = test_files[:]
+        self.py_files = list(set(py_files))
         self.py_mods = ModuleSet(self.py_files)
         self._graph = None # DepGraph cached on first use
 
@@ -326,7 +342,7 @@ class PyTasks(object):
         return self._graph
 
 
-    def _get_dep(self, module_path):
+    def action_get_dep(self, module_path):
         """action: return list of direct imports from a single py module
 
         :return dict: single value 'imports', value set of str file paths
@@ -335,9 +351,9 @@ class PyTasks(object):
         return {'imports': list(self.py_mods.get_imports(mod))}
 
 
-    def write_json_deps(self, imports):
+    def action_write_json_deps(self, imports):
         """write JSON file with direct imports of all modules"""
-        result = {k: v['imports'] for k,v in imports.items()}
+        result = {k: v['imports'] for k, v in imports.items()}
         with open(self.json_file, 'w') as fp:
             json.dump(result, fp)
 
@@ -354,7 +370,7 @@ class PyTasks(object):
             yield {
                 'basename': 'get_dep',
                 'name': mod,
-                'actions':[(self._get_dep, [mod])],
+                'actions':[(self.action_get_dep, [mod])],
                 'file_dep': [mod],
                 'uptodate': [config_changed(watched_modules)],
                 }
@@ -364,7 +380,7 @@ class PyTasks(object):
         # can not have get_args to use values from other tasks.
         yield {
             'basename': 'dep-json',
-            'actions': [self.write_json_deps],
+            'actions': [self.action_write_json_deps],
             'task_dep': ['get_dep'],
             'getargs': {'imports': ('get_dep', None)},
             'targets': [self.json_file],
@@ -373,36 +389,40 @@ class PyTasks(object):
 
 
     @staticmethod
-    def print_dependencies(node):
+    def action_print_dependencies(node):
+        '''print a node's name and its dependencies to SDTOUT'''
         node_list = sorted(n.name for n in node.all_deps())
-        print('{}: {}'.format(node.name, ', '.join(node_list)))
+        node_path = os.path.relpath(node.name)
+        deps_path = (os.path.relpath(p) for p in node_list)
+        print(' - {}: {}'.format(node_path, ', '.join(deps_path)))
 
-    @gen_after('print-deps', 'dep-json')
+    @gen_after(name='print-deps', after_task='dep-json')
     def gen_print_deps(self):
+        '''create tasks for printing node info to STDOUT'''
         for node in self.graph.nodes.values():
             yield {
                 'basename': 'print-deps',
                 'name': node.name,
-                'actions': [(self.print_dependencies, [node])],
+                'actions': [(self.action_print_dependencies, [node])],
                 'verbosity': 2,
             }
 
 
 
     @staticmethod
-    def write_dot(file_name, graph):
+    def action_write_dot(file_name, graph):
         """write a dot-file(graphviz) with import relation of modules"""
         with open(file_name, "w") as fp:
             graph.write_dot(fp)
 
 
-    @gen_after('dep-graph', 'dep-json')
+    @gen_after(name='dep-graph', after_task='dep-json')
     def gen_dep_graph(self, dot_file='deps.dot', png_file='deps.png'):
         """generate tasks for creating a `dot` graph of module imports"""
         yield {
             'basename': 'dep-graph',
             'name': 'dot',
-            'actions': [(self.write_dot, ['deps.dot', self.graph])],
+            'actions': [(self.action_write_dot, ['deps.dot', self.graph])],
             'file_dep': [self.json_file],
             'targets': [dot_file],
         }
@@ -419,21 +439,33 @@ class PyTasks(object):
 
 
 class IncrementalTasks(PyTasks):
-    """auxiliary tasks for pytest-incremental"""
-    @gen_after('outdated', 'dep-json')
+    """Manage creation of all tasks for pytest-incremental plugin"""
+
+    def __init__(self, pyfiles, test_files=None, **kwargs):
+        PyTasks.__init__(self, pyfiles, **kwargs)
+        self.test_files = test_files
+
+    def check_success(self):
+        """check if task should succeed based on GLOBAL parameter"""
+        return doit_cmd.get_var('success', False)
+
+    @gen_after(name='outdated', after_task='dep-json')
     def gen_outdated(self):
         """generate tasks used by py.test to keep-track of successful results"""
-        graph = self.graph
+        nodes = self.graph.nodes
         for test in self.test_files:
             yield {
                 'basename': 'outdated',
                 'name': test,
-                'actions': [lambda : False], # always fail if executed
-                'file_dep': [n.name for n in graph.nodes[test].all_deps()],
+                'actions': [self.check_success],
+                'file_dep': [n.name for n in nodes[test].all_deps()],
                 'verbosity': 0,
                 }
 
     def create_doit_tasks(self):
+        '''create all tasks used by the incremental plugin
+        This method is a hook used by doit
+        '''
         yield self.gen_deps()
         yield self.gen_print_deps()
         yield self.gen_dep_graph()
@@ -441,42 +473,136 @@ class IncrementalTasks(PyTasks):
 
 
 
-class OutdatedReporter(object):
-    """A doit reporter"""
+class OutdatedReporter(ZeroReporter):
+    """A doit reporter specialized to return list of outdated tasks"""
     def __init__(self, outstream, options):
         self.outdated = []
         self.outstream = outstream
-    def get_status(self, task):
-        pass
+
     def execute_task(self, task):
         if task.name.startswith('outdated:'):
-            self.outdated.append(task.name.split(':',1)[1])
+            self.outdated.append(task.name.split(':', 1)[1])
+
     def add_failure(self, task, exception):
         if task.name.startswith('outdated'):
             return
         raise pytest.UsageError("%s:%s" % (task.name, exception))
-    def add_success(self, task):
-        pass
-    def skip_uptodate(self, task):
-        pass
-    def skip_ignore(self, task):
-        pass
-    def cleanup_error(self, exception):
-        pass
+
     def runtime_error(self, msg):
         raise Exception(msg)
-    def teardown_task(self, task):
-        pass
+
     def complete_run(self):
-        self.outstream.write("%r" % self.outdated)
+        outdated_info = unicode(json.dumps(self.outdated, ensure_ascii=False))
+        self.outstream.write(outdated_info)
 
 
 ##################### end doit section
+
+
+class IncrementalControl(object):
+    '''control which modules need to execute tests
+
+    :cvar str DB_FILE: file name used as doit db file
+    :ivar py_files: (list - str) relative path of test and code under test
+    '''
+    DB_FILE = '.pytest-incremental'
+
+    def __init__(self, pkg_folders):
+        assert isinstance(pkg_folders, list)
+        self.test_files = None
+        self.py_files = []
+        for pkg in pkg_folders:
+            self.py_files.extend(self._get_pkg_modules(pkg))
+
+    def _get_pkg_modules(self, pkg_name, get_sub_folders=True):
+        """get all package modules recursively
+        :param pkg_name: (str) path to search for python modules
+        :param get_sub_folders: (bool) search sub-folders even if they are
+                                not python packages
+        """
+        pkg_glob = os.path.join(pkg_name, "*.py")
+        this_modules = glob.glob(pkg_glob)
+        for dirname, dirnames, filenames in os.walk(pkg_name):
+            for subdirname in dirnames:
+                sub_path = os.path.join(dirname, subdirname)
+                if get_sub_folders or _PyModule.is_pkg(sub_path):
+                    this_modules.extend(self._get_pkg_modules(sub_path))
+        return this_modules
+
+    def _run_doit(self, sel_tasks, doit_vars=None):
+        """load this file as dodo file to collect tasks"""
+        inc = IncrementalTasks(self.py_files, test_files=list(self.test_files))
+        output = StringIO()
+        config = {
+            'dep_file': self.DB_FILE,
+            'continue': True,
+            'reporter': OutdatedReporter,
+            'outfile': output,
+        }
+        ctx = {
+            'tasks_generator': inc,
+            'DOIT_CONFIG': config,
+        }
+        doit_cmd.reset_vars()
+        if doit_vars:
+            for key, value in doit_vars.items():
+                doit_cmd.set_var(key, value)
+        loader = ModuleTaskLoader(ctx)
+        cmd = Run(task_loader=loader)
+        cmd.parse_execute(sel_tasks)
+        output.seek(0)
+        return output.read()
+
+
+    def get_outdated(self, lock=False):
+        """run doit to find out which test files are "outdated"
+        A test file is outdated if there was a change in the content in any
+        import (direct or indirect) since last succesful execution
+
+        :return set(str): list of outdated files
+        """
+        # lock for parallel access to DB
+        if lock:
+            lock_file = '.pytest-incremental-lock'
+            lock_fd = open(lock_file, 'w')
+            fcntl.lockf(lock_fd, fcntl.LOCK_EX)
+        try:
+            outdated_tasks = ['outdated']
+            output_str = self._run_doit(outdated_tasks)
+            output = set(json.loads(output_str))
+        finally:
+            if lock:
+                fcntl.lockf(lock_fd, fcntl.LOCK_UN)
+                lock_fd.close()
+        return output
+
+    def save_success(self, success):
+        """mark doit test tasks as sucessful"""
+        tasks = ['dep-json']
+        for path in success:
+            tasks.append("outdated:%s" % path)
+        self._run_doit(tasks, doit_vars={'success':True})
+
+
+    def print_deps(self):
+        """print list of all python modules being tracked and its dependencies"""
+        self._run_doit(['print-deps'])
+
+    def create_dot_graph(self):
+        """create a graph of imports in dot format
+        dot -Tpng -o imports.png imports.dot
+        """
+        self._run_doit(['dep-graph'])
+
+
+
+### py.test integration
 
 import glob
 import pytest
 
 def pytest_addoption(parser):
+    '''py.test hook: register argparse-style options and config values'''
     group = parser.getgroup("incremental", "incremental testing")
     group.addoption(
         '--incremental', action="store_true",
@@ -501,32 +627,33 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    if (config.option.incremental or
-        config.option.list_outdated or
-        config.option.list_dependencies or
-        config.option.graph_dependencies
-        ):
+    '''Register incremental plugin only if any of its options is specified
+
+    py.test hook: called after parsing cmd optins and loading plugins.
+    '''
+    opt = config.option
+    if any((opt.incremental, opt.list_outdated, opt.list_dependencies,
+            opt.graph_dependencies)):
         config._incremental = IncrementalPlugin()
         config.pluginmanager.register(config._incremental)
 
 
 def pytest_unconfigure(config):
+    '''py.test hook: called before test process is exited.'''
     incremental_plugin = getattr(config, '_incremental', None)
     if incremental_plugin:
         del config._incremental
         config.pluginmanager.unregister(incremental_plugin)
 
 
+
 class IncrementalPlugin(object):
     """pytest-incremental plugin class
 
-    :cvar str DB_FILE: file name used as doit db file
     :ivar dict tasks: with reference to doit tasks
-    :ivar py_files: (list - str) relative path of test and code under test
     :ivar success: (list - str) path of test files (of tests that succeed)
     :ivar fail: (list - str) path of test files (of tests that failed)
     :ivar uptodate: (list - pytest.Item) wont be executed
-    :ivar pkg_folders:
 
     how it works
     =============
@@ -540,18 +667,14 @@ class IncrementalPlugin(object):
     * pytest_runtestloop: print info on up-to-date (not excuted) on terminal
     * pytest_runtest_makereport: collect result from individual tests
     * pytest_testnodedown: (xdist) send result from slave to master
-    * pytest_sessionfinish (set_success): save successful tasks in doit db
+    * pytest_sessionfinish (save_success): save successful tasks in doit db
     """
 
-    DB_FILE = '.pytest-incremental'
-
     def __init__(self):
-        self.task_list = None
-        self.py_files = []
         self.success = set()
         self.fail = set()
         self.uptodate = None
-        self.pkg_folders = None
+        self.control = None  # IncrementalControl
 
         self.list_outdated = False
         self.list_dependencies = False
@@ -559,86 +682,8 @@ class IncrementalPlugin(object):
         self.run = None
 
         self.type = None # one of (normal, master, slave)
-        self.test_files = None # required for xdist
+        self.test_files = None
 
-
-    def _run_doit(self, test_files, output, sel_tasks):
-        """load this file as dodo file to collect tasks"""
-        inc = IncrementalTasks(self.py_files, list(test_files))
-        config = {'dep_file': self.DB_FILE,
-                  'continue': True,
-                  'reporter': OutdatedReporter,
-                  'outfile': output,
-                  }
-        ctx = {'tasks_generator': inc,
-               'DOIT_CONFIG': config
-               }
-        loader = ModuleTaskLoader(ctx)
-        cmd = Run(task_loader=loader)
-        cmd.parse_execute(sel_tasks)
-        self.task_list = cmd.task_list
-
-
-    def get_outdated(self, test_files):
-        """run doit to find out which test files are "outdated"
-        A test file is outdated if there was a change in the content in any
-        import (direct or indirect) since last succesful execution
-        """
-        # lock for parallel access to DB
-        if self.type == 'slave':
-            lock_file = '.pytest-incremental-lock'
-            lock_fd = open(lock_file, 'w')
-            fcntl.lockf(lock_fd, fcntl.LOCK_EX)
-        try:
-            output = StringIO()
-            #outdated_tasks = ["outdated:%s" % path for path in test_files]
-            outdated_tasks = ['outdated']
-            self._run_doit(test_files, output, outdated_tasks)
-        finally:
-            if self.type == 'slave':
-                fcntl.lockf(lock_fd, fcntl.LOCK_UN)
-                lock_fd.close()
-        output.seek(0)
-        got = output.read()
-        return got
-
-
-    def set_success(self, test_files):
-        """mark doit test tasks as sucessful"""
-        task_dict = dict((t.name, t) for t in self.task_list)
-        db = Dependency(self.DB_FILE)
-        for path in test_files:
-            task_name = "outdated:%s" % path
-            db.save_success(task_dict[task_name])
-        db.close()
-
-
-    def _get_pkg_modules(self, pkg_name):
-        """get all package modules recursively"""
-        pkg_glob = os.path.join(pkg_name, "*.py")
-        this_modules = glob.glob(pkg_glob)
-        for dirname, dirnames, filenames in os.walk(pkg_name):
-            for subdirname in dirnames:
-                sub_path = os.path.join(dirname, subdirname)
-                if _PyModule.is_pkg(sub_path):
-                    this_modules.extend(self._get_pkg_modules(sub_path))
-        return this_modules
-
-
-    def _check_cmd_options(self, config):
-        """sanity checking"""
-        if not self.pkg_folders:
-            if not (len(config.args) == 1 and
-                    config.args[0] == os.getcwd()):
-                msg = ("(plugin-incremental) You are required to setup "
-                       "--watch-path in order to use the plugin together "
-                       "with a path argument.")
-                raise pytest.UsageError(msg)
-            if self.type == "master":
-                msg = ("(plugin-incremental) You are required to setup "
-                       "--watch-path in order to use the plugin together "
-                       "with plugin-xdist")
-                raise pytest.UsageError(msg)
 
     def _set_type(self, session):
         """figure out what type of node (xdist) we are in.
@@ -659,37 +704,44 @@ class IncrementalPlugin(object):
     def pytest_sessionstart(self, session):
         """initialization and sanity checking"""
         self.type = self._set_type(session)
-        self.pkg_folders = session.config.option.watch_path
-        self.list_outdated = session.config.option.list_outdated
-        self.list_dependencies = session.config.option.list_dependencies
-        self.graph_dependencies = session.config.option.graph_dependencies
+        opts = session.config.option
+        self.list_outdated = opts.list_outdated
+        self.list_dependencies = opts.list_dependencies
+        self.graph_dependencies = opts.graph_dependencies
         self.run = not any((self.list_outdated,
                             self.list_dependencies,
                             self.graph_dependencies))
 
-        self._check_cmd_options(session.config)
-        if self.pkg_folders:
-            for pkg in self.pkg_folders:
-                self.py_files.extend(self._get_pkg_modules(pkg))
+        # pkg_folders to watch can never be empty, if not specified use CWD
+        pkg_folders = session.config.option.watch_path
+        if not pkg_folders:
+            pkg_folders.append(os.getcwd())
 
-
-    def pytest_collect_file(self, path, parent):
-        """collect python files"""
-        if (not self.pkg_folders) and path.strpath.endswith('.py'):
-            self.py_files.append(os.path.abspath(path.strpath))
+        self.control = IncrementalControl(pkg_folders)
 
 
     def pytest_collection_modifyitems(self, session, config, items):
-        """filter out up-to-date tests"""
+        """py.test hook: reset `items` removing tests from up-to-date modules
+
+        side-effects:
+        - set self.test_files with all test modules
+        - set self.uptodate with all deselected (up-to-date) items (pytest.Item)
+        - set the param `items` with items to be executed
+        """
         # called on slave only!
+
+        # save reference of all found test modules
         test_files = set((os.path.abspath(i.location[0]) for i in items))
         self.test_files = test_files
+        self.control.test_files = test_files
+
         # list dependencies doesnt care about current state of outdated
         if self.list_dependencies or self.graph_dependencies:
             return
-        outdated_str = self.get_outdated(test_files)
-        outdated_list = eval(outdated_str)
-        outdated = set(outdated_list)
+
+        # execute doit to figure out which test modules are outdated
+        outdated = self.control.get_outdated(self.type=='slave')
+        # split items into 2 groups to be executed or not
         selected = []
         deselected = []
         for colitem in items:
@@ -698,6 +750,8 @@ class IncrementalPlugin(object):
                 selected.append(colitem)
             else:
                 deselected.append(colitem)
+
+        # TODO: reorder modules
         items[:] = selected
         self.uptodate = deselected
 
@@ -706,20 +760,18 @@ class IncrementalPlugin(object):
     # FIXME should use termial to print stuff
     def pytest_runtestloop(self):
         """print up-to-date tests info before running tests or...
-        if --list-outdated just print the outdated ones (and dont run tests)
         """
-        if self.run:
-            self.print_uptodate_test_files()
-            return
-
         # print info commands
-        if self.list_outdated:
-            self.print_outdated()
-        elif self.list_dependencies:
-            self.print_deps()
-        elif self.graph_dependencies:
-            self.create_dot_graph()
-        return 0 # dont execute tests
+        if not self.run:
+            if self.list_outdated:
+                self.print_outdated()
+            elif self.list_dependencies:
+                self.control.print_deps()
+            elif self.graph_dependencies:
+                self.control.create_dot_graph()
+            return 0 # dont execute tests
+
+        self.print_uptodate_test_files()
 
 
     def print_uptodate_test_files(self):
@@ -747,40 +799,14 @@ class IncrementalPlugin(object):
             print("All test files are up to date")
 
 
-    def print_deps(self):
-        """print list of all python modules being tracked and its dependencies"""
-        self._run_doit(self.test_files, StringIO(), ['_all_deps'])
-        dep_dict = {}
-        for task in self.task_list:
-            if task.name.startswith('_all_deps:'):
-                dep_dict[task.name[10:]] = sorted(task.file_dep)
-        for name in sorted(dep_dict):
-            print("{}: {}".format(name, ", ".join(dep_dict[name])))
-
-    def create_dot_graph(self):
-        """create a graph of imports in dot format
-        dot -Tpng -o imports.png imports.dot
-        """
-        self._run_doit(self.test_files, StringIO(), ['get_dep'])
-        dep_dict = {}
-        for task in self.task_list:
-            if task.name.startswith('get_dep:'):
-                dep_dict[task.name[8:]] = task.values['file_dep']
-        with open('imports.dot', 'w') as dot_file:
-            dot_file.write('digraph imports {\n')
-            for name, imports in dep_dict.iteritems():
-                if name in self.test_files:
-                    dot_file.write('"%s" [color = red]\n' % name)
-                for imported in imports:
-                    line = ('"%s" -> "%s"\n' % (name, imported))
-                    dot_file.write(line)
-            dot_file.write('}\n')
-
-
     def pytest_runtest_logreport(self, report):
         """save success and failures result so we can decide which files
         should be marked as successful in doit
+
+        py.test hook: called on setup/call/teardown
         """
+        if report.when != 'call':
+            return  # ignore all stages this hook is called but `call`
         if report.failed:
             self.fail.add(report.location[0])
         else:
@@ -789,6 +815,7 @@ class IncrementalPlugin(object):
 
     def pytest_testnodedown(self, node, error):
         """collect info from slave node"""
+        print('---------------testnodedown')
         # this method is only called from master
         self.success.update(node.slaveoutput['success'])
         self.fail.update(node.slaveoutput['fail'])
@@ -816,10 +843,11 @@ class IncrementalPlugin(object):
         # print("SUCCESS:", self.success)
         # print("FAIL:", self.fail)
 
-        if self.task_list is None:
+        # if some tests were deselected by a keyword we cant assure all tests
+        # passed
+        if getattr(session.config.option, 'keyword', None):
+            print("WARNING: incremental not saving results because -k was used")
             return
 
-        # FIXME: change the way success/failures are saved
-        # if not getattr(session.config.option, 'keyword', None):
-        #     successful = [os.path.abspath(f) for f in (self.success - self.fail)]
-        #     self.set_success(successful)
+        successful = [os.path.abspath(f) for f in (self.success - self.fail)]
+        self.control.save_success(successful)
