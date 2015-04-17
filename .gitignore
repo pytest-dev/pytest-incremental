@@ -6,3 +6,7 @@ __pycache__
 .coverage
 *.doit.db
 dist
+.cache
+.tox
+.pytest-incremental*
+MANIFEST

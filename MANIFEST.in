@@ -1,0 +1,7 @@
+include tests
+include setup.py
+include tox.ini
+include README.rst
+include LICNSE
+include CHANGES
+

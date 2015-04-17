@@ -1,12 +1,15 @@
+import os.path
+
 from distutils.core import setup
 
-_readme = open('README.rst', 'r')
-README_TEXT = _readme.read()
-_readme.close()
+
+with open(os.path.join(os.path.dirname(__file__), 'README.rst'), 'r') as fp:
+    README_TEXT = fp.read()
+
 
 setup(name = 'pytest-incremental',
       description = 'an incremental test runner (pytest plugin)',
-      version = '0.4.dev',
+      version = '0.4.dev1',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
@@ -20,11 +23,14 @@ setup(name = 'pytest-incremental',
                      'Operating System :: POSIX',
                      'Programming Language :: Python :: 2',
                      'Programming Language :: Python :: 2.7',
+                     'Programming Language :: Python :: 3',
+                     'Programming Language :: Python :: 3.4',
                      'Topic :: Software Development :: Testing',
                      ],
       py_modules = ['pytest_incremental'],
       install_requires = [
-          'doit >= 0.27.0',
+          'six',
+          'doit > 0.27.9',
           'pytest',
           'pytest-xdist',
       ],

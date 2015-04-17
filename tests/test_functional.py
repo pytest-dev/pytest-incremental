@@ -1,6 +1,6 @@
 import time
 
-pytest_plugins = 'pytester'
+pytest_plugins = 'pytester', 'incremental'
 
 
 TEST_FAIL = """

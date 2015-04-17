@@ -18,14 +18,8 @@ import json
 import functools
 from collections import deque
 
-try:
-    # PY 3
-    import io
-    StringIO = io.StringIO
-except ImportError: # pragma: no cover
-    # PY 2
-    import StringIO
-    StringIO = StringIO.StringIO
+import six
+from six import StringIO
 
 
 from doit.task import Task, DelayedLoader
@@ -492,8 +486,8 @@ class OutdatedReporter(ZeroReporter):
         raise Exception(msg)
 
     def complete_run(self):
-        outdated_info = unicode(json.dumps(self.outdated, ensure_ascii=False))
-        self.outstream.write(outdated_info)
+        outdated_info = json.dumps(self.outdated)
+        self.outstream.write(six.u(outdated_info))
 
 
 ##################### end doit section
