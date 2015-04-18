@@ -1,6 +1,19 @@
+import sys
 import time
 
 pytest_plugins = 'pytester', 'incremental'
+
+
+def get_results(recorder):
+    '''filter records to get only call results'''
+    results = {}
+    for result in recorder.getreports():
+        when = getattr(result, 'when', None)
+        if  when is None:
+            continue
+        test_name = result.nodeid.split('::')[1]
+        results[test_name, when] = result.outcome
+    return results
 
 
 TEST_FAIL = """
@@ -12,16 +25,17 @@ def test_foo():
 
 def test_fail_always_reexecute_test(testdir):
     test = testdir.makepyfile(TEST_FAIL)
-    result = testdir.runpytest('-v', '--incremental',
-                               '--watch-path=%s'%test.dirpath(), test)
-    result.stdout.fnmatch_lines([
-            '*test_foo FAILED',
-            ])
-    result2 = testdir.runpytest('-v', '--incremental',
-                                '--watch-path=%s'%test.dirpath(), test)
-    result2.stdout.fnmatch_lines([
-            '*test_foo FAILED',
-            ])
+    args = ['-v', '--inc', '--inc-path=%s'%test.dirpath(), test]
+
+    # first time failed
+    rec = testdir.inline_run(*args)
+    results = get_results(rec)
+    assert results['test_foo', 'call'] == 'failed'
+
+    # second time re-executed
+    rec2 = testdir.inline_run(*args)
+    results2 = get_results(rec2)
+    assert results2['test_foo', 'call'] == 'failed'
 
 
 TEST_OK =  """
@@ -36,6 +50,7 @@ def foo():
     return 'foo'
 def test_foo():
     assert 'foo' == foo()
+def test_bar():
     assert True
 """
 
@@ -43,24 +58,29 @@ def test_foo():
 def test_ok_reexecute_only_if_changed(testdir):
     # first time
     test = testdir.makepyfile(TEST_OK)
-    result = testdir.runpytest('-v', '--incremental',
-                               '--watch-path=%s'%test.dirpath(), test)
-    result.stdout.fnmatch_lines(['*test_foo PASSED'])
+    args = ['-v', '--inc', '--inc-path=%s'%test.dirpath(), str(test)]
+
+    # first time passed
+    rec = testdir.inline_run(*args)
+    results = get_results(rec)
+    assert results['test_foo', 'call'] == 'passed'
+    assert len(results) == 3
 
     # second time not executed because up-to-date
-    result2 = testdir.runpytest('-v', '--incremental',
-                                '--watch-path=%s'%test.dirpath(), test)
-    result2.stdout.fnmatch_lines(['*up-to-date*'])
+    rec2 = testdir.inline_run(*args)
+    results2 = get_results(rec2)
+    assert len(results2) == 0
 
-    # sleep for a while to make sure modified content
-    # wont have the same timestamp
-    time.sleep(0.5)
-
-    # change file, re-execute tests
-    test2 = testdir.makepyfile(TEST_OK_2)
-    result = testdir.runpytest('-v', '--incremental',
-                               '--watch-path=%s'%test.dirpath(), test2)
-    result.stdout.fnmatch_lines(['*test_foo PASSED'])
+    # change module
+    del sys.modules['test_ok_reexecute_only_if_changed']
+    test.write(TEST_OK_2)
+    # re-execute tests
+    rec3 = testdir.inline_run(*args)
+    results3 = get_results(rec3)
+    print(rec3.getreports(), results3)
+    assert results3['test_foo', 'call'] == 'passed'
+    assert results3['test_bar', 'call'] == 'passed'
+    assert len(results3) == 6
 
 
 TEST_SKIP =  """
@@ -79,16 +99,14 @@ def test_my_fail():
 def test_skip_same_behaviour_as_passed(testdir):
     # first time
     test = testdir.makepyfile(TEST_SKIP)
-    result = testdir.runpytest('-v', '--incremental',
-                               '--watch-path=%s'%test.dirpath(), test)
-    result.stdout.fnmatch_lines([
-            '*test_my_skip SKIPPED',
-            '*test_my_fail xfail',
-            ])
+    args = ['-v', '--inc', '--inc-path=%s'%test.dirpath(), test]
+
+    rec = testdir.inline_run(*args)
+    results = get_results(rec)
+    assert results['test_my_skip', 'setup'] == 'skipped'
+    assert results['test_my_fail', 'call'] == 'skipped'
 
     # second time not executed because up-to-date
-    result2 = testdir.runpytest('-v', '--incremental',
-                                '--watch-path=%s'%test.dirpath(), test)
-    result2.stdout.fnmatch_lines([
-            '*up-to-date*',
-            ])
+    rec2 = testdir.inline_run(*args)
+    results2 = get_results(rec2)
+    assert len(results2) == 0

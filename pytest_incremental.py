@@ -584,7 +584,6 @@ class IncrementalControl(object):
 
     def create_dot_graph(self):
         """create a graph of imports in dot format
-        dot -Tpng -o imports.png imports.dot
         """
         self._run_doit(['dep-graph'])
 
@@ -599,25 +598,25 @@ def pytest_addoption(parser):
     '''py.test hook: register argparse-style options and config values'''
     group = parser.getgroup("incremental", "incremental testing")
     group.addoption(
-        '--incremental', action="store_true",
+        '--inc', action="store_true",
         dest="incremental", default=False,
         help="execute only outdated tests (based on modified files)")
     group.addoption(
-        '--watch-path', action="append",
+        '--inc-path', action="append",
         dest="watch_path", default=[],
         help="file path of a package. watch for file changes in packages (multi-allowed)")
     group.addoption(
-        '--list-outdated', action="store_true",
+        '--inc-outdated', action="store_true",
         dest="list_outdated", default=False,
         help="print list of outdated test files")
     group.addoption(
-        '--list-dependencies', action="store_true",
+        '--inc-deps', action="store_true",
         dest="list_dependencies", default=False,
         help="print list of python modules being tracked and its dependencies")
     group.addoption(
-        '--graph-dependencies', action="store_true",
+        '--inc-graph', action="store_true",
         dest="graph_dependencies", default=False,
-        help="create graph file of dependencies in dot format 'imports.dot'")
+        help="create graph file of dependencies in dot format 'deps.dot'")
 
 
 def pytest_configure(config):
@@ -654,8 +653,6 @@ class IncrementalPlugin(object):
 
     * pytest_sessionstart: check configuration,
                            find python files (if pkg specified)
-    * pytest_collect_file: to find out python files that doit will keep track
-                           (if pkg not specified)
     * pytest_collection_modifyitems (get_outdated): run doit and remove
              up-to-date tests from test items
     * pytest_runtestloop: print info on up-to-date (not excuted) on terminal
@@ -799,8 +796,6 @@ class IncrementalPlugin(object):
 
         py.test hook: called on setup/call/teardown
         """
-        if report.when != 'call':
-            return  # ignore all stages this hook is called but `call`
         if report.failed:
             self.fail.add(report.location[0])
         else:
@@ -828,9 +823,8 @@ class IncrementalPlugin(object):
             config.slaveoutput['test_files'] = self.test_files
             return
         elif self.type == "master":
-            # we need to make sure task have all calc_dep calculated
-            outdated_tasks = ["outdated:%s" % path for path in self.test_files]
-            self._run_doit(self.test_files, StringIO(), outdated_tasks)
+            pass
+            # self.control.get_outdated()
 
         # debug messages
         # print
