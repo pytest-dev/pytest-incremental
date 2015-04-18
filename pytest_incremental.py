@@ -136,11 +136,8 @@ class ModuleSet(object):
 
         # last part of import section might not be a module
         # remove last section
-        only = module_name.rsplit('.', 1)[0]
-        # when removing last section, need to remove relative_guess to
-        # avoid importing its own package
-        only = only[len(relative_guess):]
-        imp_mod2 = self.by_name.get(only)
+        no_obj = module_name.rsplit('.', 1)[0]
+        imp_mod2 = self.by_name.get(no_obj)
         if imp_mod2:
             return imp_mod2
 
@@ -148,8 +145,11 @@ class ModuleSet(object):
         if module_name in self.pkgs:
             pkg_name = module_name  + ".__init__"
             return self.by_name[pkg_name]
-        if only in self.pkgs:
-            pkg_name = only +  ".__init__"
+        # when removing last section (obj), need to remove relative_guess to
+        # avoid importing its own package
+        no_rel_no_obj = no_obj[len(relative_guess):]
+        if no_rel_no_obj in self.pkgs:
+            pkg_name = no_rel_no_obj +  ".__init__"
             return self.by_name[pkg_name]
 
 
@@ -421,10 +421,12 @@ class PyTasks(object):
             'targets': [dot_file],
         }
 
+        # generate PNG with bottom-up tree
+        dot_cmd = 'dot -Tpng -Grankdir=BT '
         yield {
             'basename': 'dep-graph',
             'name': 'jpeg',
-            'actions': ["dot -Tpng -o %(targets)s %(dependencies)s"],
+            'actions': [dot_cmd + " -o %(targets)s %(dependencies)s"],
             'file_dep': [dot_file],
             'targets': [png_file],
         }

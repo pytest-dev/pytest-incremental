@@ -13,6 +13,8 @@ class FOO:
     b = os.path.join(pkg, 'foo_b.py')
     c = os.path.join(pkg, 'foo_c.py')
     d = os.path.join(pkg, 'foo_d.py')
+    e = os.path.join(pkg, 'foo_e.py')
+    f = os.path.join(pkg, 'foo_f.py')
 class SUB:
     pkg = os.path.join(FOO.pkg, 'sub')
     init = os.path.join(pkg, '__init__.py')
@@ -96,24 +98,28 @@ class Test_ModuleSet_GetImports(object):
         assert len(got) == 0
 
     def test_import_module(self):
+        # import bar
         modset = ModuleSet([FOO.a, BAR])
         got = modset.get_imports(modset.by_name['foo.foo_a'])
         assert len(got) == 1
         assert BAR in got
 
     def test_import_pkg(self):
+        # import foo
         modset = ModuleSet([FOO.init, BAR])
         got = modset.get_imports(modset.by_name['bar'])
         assert len(got) == 1
         assert FOO.init in got
 
     def test_from_pkg_import_module(self):
+        # from foo import foo_b
         modset = ModuleSet([FOO.init, FOO.a, FOO.b])
         got = modset.get_imports(modset.by_name['foo.foo_a'])
         assert len(got) == 1
         assert FOO.b in got
 
     def test_from_import_object(self):
+        # from foo.foo_c import obj_c
         modset = ModuleSet([FOO.init, FOO.a, FOO.b, FOO.c])
         got = modset.get_imports(modset.by_name['foo.foo_a'])
         assert len(got) == 2
@@ -121,37 +127,57 @@ class Test_ModuleSet_GetImports(object):
         assert FOO.c in got
 
     def test_from_pkg_import_obj(self):
+        # from foo import obj_1
         modset = ModuleSet([FOO.init, BAZ])
         got = modset.get_imports(modset.by_name['baz'])
         assert len(got) == 1
         assert FOO.init in got
 
     def test_import_obj(self):
+        # import baz.obj_baz
         modset = ModuleSet([FOO.b, BAZ])
         got = modset.get_imports(modset.by_name['foo.foo_b'])
         assert len(got) == 1
         assert BAZ in got
 
-    def test_relative_old_import_old(self):
+    def test_relative_import_old(self):
+        # import foo_c
         modset = ModuleSet([FOO.init, FOO.b, FOO.c])
         got = modset.get_imports(modset.by_name['foo.foo_b'])
         assert len(got) == 1
         assert FOO.c in got
 
     def test_relative_intra_import_pkg_obj(self):
+        # from . import foo_i
         modset = ModuleSet([FOO.init, FOO.c])
         got = modset.get_imports(modset.by_name['foo.foo_c'])
         assert len(got) == 1
         assert FOO.init in got
 
     def test_relative_intra_import_module(self):
+        # from . import foo_c
         modset = ModuleSet([FOO.init, FOO.c, FOO.d])
         got = modset.get_imports(modset.by_name['foo.foo_d'])
         assert len(got) == 1
         assert FOO.c in got
 
     def test_relative_parent(self):
+        # from .. import foo_d
         modset = ModuleSet([FOO.init, FOO.d, SUB.init, SUB.a])
         got = modset.get_imports(modset.by_name['foo.sub.sub_a'])
         assert len(got) == 1
         assert FOO.d in got
+
+    def test_relative_sub_import_obj(self):
+        # from sub.sub_a import obj_sub_a_xxx
+        modset = ModuleSet([FOO.init, FOO.e, SUB.init, SUB.a])
+        got = modset.get_imports(modset.by_name['foo.foo_e'])
+        assert len(got) == 1
+        assert SUB.a in got
+
+    def test_relative_sub_import_mod(self):
+        # from sub import sub_a
+        modset = ModuleSet([FOO.init, FOO.f, SUB.init, SUB.a])
+        got = modset.get_imports(modset.by_name['foo.foo_f'])
+        assert len(got) == 1
+        assert SUB.a in got
