@@ -16,7 +16,7 @@ import ast
 import fcntl
 import json
 import functools
-from collections import deque
+from collections import deque, defaultdict
 
 import six
 from six import StringIO
@@ -647,21 +647,30 @@ class IncrementalPlugin(object):
     * pytest_collection_modifyitems (get_outdated): run doit and remove
              up-to-date tests from test items
     * pytest_runtestloop: print info on up-to-date (not excuted) on terminal
-    * pytest_runtest_makereport: collect result from individual tests
+    * pytest_runtest_logreport: collect result from individual tests
     * pytest_sessionfinish (save_success): save successful tasks in doit db
     """
 
     def __init__(self):
-        self.success = set()
-        self.fail = set()
-        self.uptodate = None
-        self.control = None  # IncrementalControl
-
+        # command line options
         self.list_outdated = False
         self.list_dependencies = False
         self.graph_dependencies = False
         self.run = None
-        self.test_files = None
+
+        # IncrementalControl, set on sessionstart
+        self.control = None
+
+        # test information gathering during collect phase
+        self.uptodate = None  # list of test items that are up-to-date
+        self.outofdate = None  # list of test items that are out-of-date
+        self.test_files = None  # list of collected test files
+
+        # test item results set on logreport
+        # key: test file path
+        # value: nodeid
+        self.success = defaultdict(set)
+        self.fail = defaultdict(set)
 
 
     def pytest_sessionstart(self, session):
@@ -713,6 +722,7 @@ class IncrementalPlugin(object):
 
         # TODO: reorder modules
         items[:] = selected
+        self.outofdate = selected
         self.uptodate = deselected
 
 
@@ -766,10 +776,11 @@ class IncrementalPlugin(object):
 
         py.test hook: called on setup/call/teardown
         """
+        path = report.fspath
         if report.failed:
-            self.fail.add(report.location[0])
+            self.fail[path].add(report.nodeid)
         else:
-            self.success.add(report.location[0])
+            self.success[path].add(report.nodeid)
 
     def pytest_sessionfinish(self, session):
         """save success in doit"""
@@ -787,5 +798,15 @@ class IncrementalPlugin(object):
             print("\nWARNING: incremental not saving results because -k was used")
             return
 
-        successful = [os.path.abspath(f) for f in (self.success - self.fail)]
-        self.control.save_success(successful)
+        successful = []
+        for path in self.test_files:
+            if os.path.relpath(path) in self.fail:
+                continue  # do not save anythin fails
+
+            # check all items were really executed
+            # when user hits Ctrl-C this function still gets called
+            expected = set(i.nodeid for i in self.outofdate if i.fspath == path)
+            if len(expected) == len(self.success[os.path.relpath(path)]):
+                successful.append(path)
+
+        self.control.save_success(os.path.abspath(f) for f in successful)
