@@ -139,7 +139,7 @@ class TestIncrementalControl(object):
         control.test_files = [self.tt_mod1, self.tt_mod2]
 
         # at first all are outdated
-        got = control.get_outdated(lock=True)
+        got = control.get_outdated()
         assert got == set([self.tt_mod1, self.tt_mod2])
 
         # save one success and check outdated

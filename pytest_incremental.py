@@ -550,27 +550,16 @@ class IncrementalControl(object):
         return output.read()
 
 
-    def get_outdated(self, lock=False):
+    def get_outdated(self):
         """run doit to find out which test files are "outdated"
         A test file is outdated if there was a change in the content in any
         import (direct or indirect) since last succesful execution
 
         :return set(str): list of outdated files
         """
-        # lock for parallel access to DB
-        if lock:
-            lock_file = '.pytest-incremental-lock'
-            lock_fd = open(lock_file, 'w')
-            fcntl.lockf(lock_fd, fcntl.LOCK_EX)
-        try:
-            outdated_tasks = ['outdated']
-            output_str = self._run_doit(outdated_tasks)
-            output = set(json.loads(output_str))
-        finally:
-            if lock:
-                fcntl.lockf(lock_fd, fcntl.LOCK_UN)
-                lock_fd.close()
-        return output
+        outdated_tasks = ['outdated']
+        output_str = self._run_doit(outdated_tasks)
+        return set(json.loads(output_str))
 
     def save_success(self, success):
         """mark doit test tasks as sucessful"""
@@ -659,7 +648,6 @@ class IncrementalPlugin(object):
              up-to-date tests from test items
     * pytest_runtestloop: print info on up-to-date (not excuted) on terminal
     * pytest_runtest_makereport: collect result from individual tests
-    * pytest_testnodedown: (xdist) send result from slave to master
     * pytest_sessionfinish (save_success): save successful tasks in doit db
     """
 
@@ -673,30 +661,11 @@ class IncrementalPlugin(object):
         self.list_dependencies = False
         self.graph_dependencies = False
         self.run = None
-
-        self.type = None # one of (normal, master, slave)
         self.test_files = None
-
-
-    def _set_type(self, session):
-        """figure out what type of node (xdist) we are in.
-        'normal' if not using xdist
-        or master/slave
-        """
-        session_name = session.__class__.__name__
-        if (session.config.pluginmanager.hasplugin('dsession') or
-            session_name == 'DSession'):
-            return "master"
-        elif (hasattr(session.config, 'slaveinput') or
-              session_name == 'SlaveSession'):
-            return "slave"
-        else:
-            return "normal"
 
 
     def pytest_sessionstart(self, session):
         """initialization and sanity checking"""
-        self.type = self._set_type(session)
         opts = session.config.option
         self.list_outdated = opts.list_outdated
         self.list_dependencies = opts.list_dependencies
@@ -721,8 +690,6 @@ class IncrementalPlugin(object):
         - set self.uptodate with all deselected (up-to-date) items (pytest.Item)
         - set the param `items` with items to be executed
         """
-        # called on slave only!
-
         # save reference of all found test modules
         test_files = set((os.path.abspath(i.location[0]) for i in items))
         self.test_files = test_files
@@ -733,7 +700,7 @@ class IncrementalPlugin(object):
             return
 
         # execute doit to figure out which test modules are outdated
-        outdated = self.control.get_outdated(self.type=='slave')
+        outdated = self.control.get_outdated()
         # split items into 2 groups to be executed or not
         selected = []
         deselected = []
@@ -761,6 +728,7 @@ class IncrementalPlugin(object):
             elif self.list_dependencies:
                 self.control.print_deps()
             elif self.graph_dependencies:
+                print('Graph file written in deps.dot')
                 self.control.create_dot_graph()
             return 0 # dont execute tests
 
@@ -803,30 +771,10 @@ class IncrementalPlugin(object):
         else:
             self.success.add(report.location[0])
 
-
-    def pytest_testnodedown(self, node, error):
-        """collect info from slave node"""
-        print('---------------testnodedown')
-        # this method is only called from master
-        self.success.update(node.slaveoutput['success'])
-        self.fail.update(node.slaveoutput['fail'])
-        if not self.test_files:
-            self.test_files = node.slaveoutput['test_files']
-
-
     def pytest_sessionfinish(self, session):
         """save success in doit"""
         if not self.run:
             return
-        if self.type == 'slave':
-            config = session.config
-            config.slaveoutput['success'] = self.success
-            config.slaveoutput['fail'] = self.fail
-            config.slaveoutput['test_files'] = self.test_files
-            return
-        elif self.type == "master":
-            pass
-            # self.control.get_outdated()
 
         # debug messages
         # print
@@ -836,7 +784,7 @@ class IncrementalPlugin(object):
         # if some tests were deselected by a keyword we cant assure all tests
         # passed
         if getattr(session.config.option, 'keyword', None):
-            print("WARNING: incremental not saving results because -k was used")
+            print("\nWARNING: incremental not saving results because -k was used")
             return
 
         successful = [os.path.abspath(f) for f in (self.success - self.fail)]
