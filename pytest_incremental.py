@@ -634,11 +634,6 @@ def pytest_unconfigure(config):
 class IncrementalPlugin(object):
     """pytest-incremental plugin class
 
-    :ivar dict tasks: with reference to doit tasks
-    :ivar success: (list - str) path of test files (of tests that succeed)
-    :ivar fail: (list - str) path of test files (of tests that failed)
-    :ivar uptodate: (list - pytest.Item) wont be executed
-
     how it works
     =============
 
@@ -662,15 +657,13 @@ class IncrementalPlugin(object):
         self.control = None
 
         # test information gathering during collect phase
-        self.uptodate = None  # list of test items that are up-to-date
-        self.outofdate = None  # list of test items that are out-of-date
+        self.uptodate_paths = set()  # test paths that are up-to-date
+        self.outofdate = defaultdict(list)  # path: list of nodeid
         self.test_files = None  # list of collected test files
 
-        # test item results set on logreport
-        # key: test file path
-        # value: nodeid
-        self.success = defaultdict(set)
-        self.fail = defaultdict(set)
+        # sets of nodeid's set on logreport
+        self.passed = set()
+        self.failed = set()
 
 
     def pytest_sessionstart(self, session):
@@ -696,11 +689,11 @@ class IncrementalPlugin(object):
 
         side-effects:
         - set self.test_files with all test modules
-        - set self.uptodate with all deselected (up-to-date) items (pytest.Item)
+        - set self.uptodate_paths with all test files that wont be executed
         - set the param `items` with items to be executed
         """
         # save reference of all found test modules
-        test_files = set((os.path.abspath(i.location[0]) for i in items))
+        test_files = set((str(i.fspath) for i in items))
         self.test_files = test_files
         self.control.test_files = test_files
 
@@ -712,18 +705,17 @@ class IncrementalPlugin(object):
         outdated = self.control.get_outdated()
         # split items into 2 groups to be executed or not
         selected = []
-        deselected = []
         for colitem in items:
-            path = os.path.abspath(colitem.location[0])
+            path = str(colitem.fspath)
             if path in outdated:
+                self.outofdate[path].append(colitem.nodeid)
                 selected.append(colitem)
             else:
-                deselected.append(colitem)
+                self.uptodate_paths.add(path)
 
         # TODO: reorder modules
         items[:] = selected
-        self.outofdate = selected
-        self.uptodate = deselected
+
 
 
 
@@ -747,24 +739,24 @@ class IncrementalPlugin(object):
 
     def print_uptodate_test_files(self):
         """print info on up-to-date tests"""
-        uptodate_test_files = set((item.location[0] for item in self.uptodate))
-        if uptodate_test_files:
+        if self.uptodate_paths:
             print()
-        for test_file in sorted(uptodate_test_files):
+        rel_paths = (os.path.relpath(p) for p in self.uptodate_paths)
+        for test_file in sorted(rel_paths):
             print("{}  [up-to-date]".format(test_file))
 
     def print_outdated(self):
         """print list of outdated test files"""
-        uptodate_test_files = set((os.path.abspath(item.location[0]) for item in self.uptodate))
         outdated = []
         for test in self.test_files:
-            if test not in uptodate_test_files:
+            if test not in self.uptodate_paths:
                 outdated.append(test)
 
         print()
         if outdated:
             print("List of outdated test files:")
-            for test in sorted(outdated):
+            rel_paths = (os.path.relpath(p) for p in outdated)
+            for test in sorted(rel_paths):
                 print(test)
         else:
             print("All test files are up to date")
@@ -776,21 +768,15 @@ class IncrementalPlugin(object):
 
         py.test hook: called on setup/call/teardown
         """
-        path = report.fspath
         if report.failed:
-            self.fail[path].add(report.nodeid)
+            self.failed.add(report.nodeid)
         else:
-            self.success[path].add(report.nodeid)
+            self.passed.add(report.nodeid)
 
     def pytest_sessionfinish(self, session):
         """save success in doit"""
         if not self.run:
             return
-
-        # debug messages
-        # print
-        # print("SUCCESS:", self.success)
-        # print("FAIL:", self.fail)
 
         # if some tests were deselected by a keyword we cant assure all tests
         # passed
@@ -800,13 +786,14 @@ class IncrementalPlugin(object):
 
         successful = []
         for path in self.test_files:
-            if os.path.relpath(path) in self.fail:
-                continue  # do not save anythin fails
-
-            # check all items were really executed
-            # when user hits Ctrl-C this function still gets called
-            expected = set(i.nodeid for i in self.outofdate if i.fspath == path)
-            if len(expected) == len(self.success[os.path.relpath(path)]):
+            for nodeid in self.outofdate[path]:
+                if nodeid in self.failed:
+                    break
+                # check all items were really executed
+                # when user hits Ctrl-C sessionfinish still gets called
+                if nodeid not in self.passed:
+                    break
+            else:
                 successful.append(path)
 
         self.control.save_success(os.path.abspath(f) for f in successful)

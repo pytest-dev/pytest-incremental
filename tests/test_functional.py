@@ -41,7 +41,7 @@ def test_list_outdated(testdir, capsys):
         line = out.pop()
         if line == 'List of outdated test files:':
             outdated_list = out.pop()
-            assert '/test_list_outdated.py' in outdated_list
+            assert 'test_list_outdated.py' in outdated_list
             break
     else:  # pragma: no cover
         assert False, 'outdated list not found'
