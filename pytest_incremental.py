@@ -145,6 +145,7 @@ class ModuleSet(object):
         if module_name in self.pkgs:
             pkg_name = module_name  + ".__init__"
             return self.by_name[pkg_name]
+
         # when removing last section (obj), need to remove relative_guess to
         # avoid importing its own package
         no_rel_no_obj = no_obj[len(relative_guess):]
@@ -158,7 +159,8 @@ class ModuleSet(object):
         :param module: _PyModule
         :return: (set - str) of path names
         """
-        module_pkg = '.'.join(module.fqn[:-1])
+        # print('####', module.fqn)
+        # print(self.by_name.keys(), '\n\n')
         imports = set()
         raw_imports = find_imports(module.path)
         for import_entry in raw_imports:
@@ -175,10 +177,13 @@ class ModuleSet(object):
 
             else:
                 # deal with old-style relative imports
-                full_relative = "%s.%s" % (module_pkg, full)
-                imported = self._get_imported_module(full_relative, module_pkg)
-                if imported:
-                    imports.add(imported.path)
+                for level in range(1, len(module.fqn)):
+                    module_pkg = '.'.join(module.fqn[:-level])
+                    full_relative = "%s.%s" % (module_pkg, full)
+                    imported = self._get_imported_module(full_relative, module_pkg)
+                    if imported:
+                        imports.add(imported.path)
+                        break
                 else:
                     imported = self._get_imported_module(full)
                     if imported:

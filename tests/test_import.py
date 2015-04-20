@@ -19,6 +19,7 @@ class SUB:
     pkg = os.path.join(FOO.pkg, 'sub')
     init = os.path.join(pkg, '__init__.py')
     a = os.path.join(pkg, 'sub_a.py')
+    b = os.path.join(pkg, 'sub_b.py')
 BAR = os.path.join(sample_dir, 'bar.py')
 BAZ = os.path.join(sample_dir, 'baz.py')
 
@@ -58,6 +59,7 @@ class Test_PyModule(object):
         assert False == _PyModule.is_pkg(SUB.a)
 
     def test_fqn(self):
+        assert ['bar'] == _PyModule(BAR).fqn
         assert ['foo', '__init__'] == _PyModule(FOO.init).fqn
         assert ['foo', 'foo_a'] == _PyModule(FOO.a).fqn
         assert ['foo', 'sub', 'sub_a'] == _PyModule(SUB.a).fqn
@@ -179,5 +181,12 @@ class Test_ModuleSet_GetImports(object):
         # from sub import sub_a
         modset = ModuleSet([FOO.init, FOO.f, SUB.init, SUB.a])
         got = modset.get_imports(modset.by_name['foo.foo_f'])
+        assert len(got) == 1
+        assert SUB.a in got
+
+    def test_relative_intra_pkg_obj(self):
+        # from sub.sub_A import obj_sub_a_xxx
+        modset = ModuleSet([FOO.init, SUB.init, SUB.a, SUB.b])
+        got = modset.get_imports(modset.by_name['foo.sub.sub_b'])
         assert len(got) == 1
         assert SUB.a in got
