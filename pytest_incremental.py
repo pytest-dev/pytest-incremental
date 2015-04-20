@@ -673,6 +673,10 @@ class IncrementalPlugin(object):
 
     def pytest_sessionstart(self, session):
         """initialization and sanity checking"""
+        if session.config.pluginmanager.hasplugin('dsession'):
+            msg = 'Plugin incremental is not compatible with plugin xdist.'
+            raise pytest.UsageError(msg)
+
         opts = session.config.option
         self.list_outdated = opts.list_outdated
         self.list_dependencies = opts.list_dependencies

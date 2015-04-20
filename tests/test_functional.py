@@ -168,3 +168,12 @@ def test_keyword_dont_save_success(testdir, capsys):
     results = get_results(rec)
     assert results['test_foo', 'call'] == 'passed'
     assert results['test_bar', 'call'] == 'passed'
+
+
+def test_xdist_not_supported(testdir, capsys):
+    from _pytest.main import EXIT_USAGEERROR
+    test = testdir.makepyfile(TEST_SAMPLE)
+    got = testdir.inline_run('--inc', '-n', '2', test)
+    assert got.ret == EXIT_USAGEERROR
+    err = capsys.readouterr()[1].splitlines()
+    assert 'ERROR: Plugin incremental is not compatible with plugin xdist.' in err
