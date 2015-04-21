@@ -216,49 +216,20 @@ class GNode(object):
         """add a dependency of self"""
         self.deps.add(dep)
 
-    def all_deps(self, stack=None):
+    def all_deps(self):
         """return set of GNode with all deps from this node (including self)"""
-        # return value if already calculated
-        if self._all_deps is not None:
-            return self._all_deps
-
-        # stack is used to detect cyclic dependencies
-        if stack is None:
-            stack = set()
-
-        stack.add(self)
-        deps = set([self]) # keep track of all deps
-        to_process = deque(self.deps) # deps found but not processed yet
-        # recursive descend to all deps
-        while to_process:
-            node = to_process.popleft()
-            deps.add(node)
-            # cycle detected, copy dependencies from the first node in the cycle
-            if node in stack:
-                self.copy_from = node
-                continue
-            # if node in cycle that was already processed, skip
-            if node.copy_from and node.copy_from in deps:
-                continue
-            # recursive add deps
-            for got in node.all_deps(stack):
-                if got not in deps:
-                    to_process.append(got)
-
-        stack.remove(self)
-
-        # node deps will be copied but need to return deps out of cycle
-        if self.copy_from:
-            return deps
-
-        self._all_deps = deps
-        # finish processing of a sub-tree, set all copies
-        if not stack:
-            for node in deps:
-                if node.copy_from:
-                    node._all_deps = node.copy_from._all_deps
-                    node.copy_from = None
-        return self._all_deps
+        todo = set()
+        done = set()
+        todo.add(self)
+        while todo:
+            node = todo.pop()
+            if node._all_deps:
+                done.update(node._all_deps)
+            else:
+                todo.update(n for n in node.deps if n not in done)
+                done.add(node)
+        self._all_deps = done
+        return done
 
 
 class DepGraph(object):
@@ -288,13 +259,13 @@ class DepGraph(object):
         :param stream: Any object with a `write()` method
         """
         stream.write("digraph imports {\n")
-        for node in self.nodes.values():
+        for node in sorted(self.nodes.values(), key=lambda x:x.name):
             # FIXME add option to include test files or not
             #if node.name.startswith('test'):
             #    continue
             node_path = os.path.relpath(node.name)
             if node.deps:
-                for dep in node.deps:
+                for dep in sorted(node.deps, key=lambda x: x.name):
                     dep_path = os.path.relpath(dep.name)
                     stream.write('"{}" -> "{}"\n'.format(node_path, dep_path))
             else:
