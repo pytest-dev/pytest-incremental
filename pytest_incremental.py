@@ -661,9 +661,10 @@ class IncrementalPlugin(object):
                             self.graph_dependencies))
 
         # pkg_folders to watch can never be empty, if not specified use CWD
-        pkg_folders = session.config.option.watch_path
+        pkg_folders = [os.path.abspath(p) for p in
+                       session.config.option.watch_path]
         if not pkg_folders:
-            pkg_folders.append(os.getcwd())
+            pkg_folders = [os.getcwd()]
 
         self.control = IncrementalControl(pkg_folders)
 

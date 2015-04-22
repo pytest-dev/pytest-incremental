@@ -1,3 +1,4 @@
+import os
 import sys
 
 pytest_plugins = 'pytester', 'incremental'
@@ -71,7 +72,7 @@ def test_foo():
 """
 
     test = testdir.makepyfile(TEST_FAIL)
-    args = ['--inc', '--inc-path=%s'%test.dirpath(), test]
+    args = ['--inc', test]
 
     # first time failed
     rec = testdir.inline_run(*args)
@@ -103,7 +104,7 @@ def test_bar():
 """
     # first time
     test = testdir.makepyfile(TEST_OK)
-    args = ['--inc', '--inc-path=%s'%test.dirpath(), str(test)]
+    args = ['--inc', str(test)]
 
     # first time passed
     rec = testdir.inline_run(*args)
@@ -147,7 +148,7 @@ def test_my_fail():
 """
     # first time
     test = testdir.makepyfile(TEST_SKIP)
-    args = ['--inc', '--inc-path=%s'%test.dirpath(), test]
+    args = ['--inc', test]
 
     rec = testdir.inline_run(*args)
     results = get_results(rec)
@@ -178,4 +179,16 @@ def test_xdist_not_supported(testdir, capsys):
     got = testdir.inline_run('--inc', '-n', '2', test)
     assert got.ret == EXIT_USAGEERROR
     err = capsys.readouterr()[1].splitlines()
-    assert 'ERROR: Plugin incremental is not compatible with plugin xdist.' in err
+    msg = 'ERROR: Plugin incremental is not compatible with plugin xdist.'
+    assert msg in err
+
+
+def test_inc_path(testdir, capsys):
+    sub = testdir.mkdir('sub')
+    base = os.path.relpath(str(sub)) # pass a relative path
+    with open('sub/test_x.py', 'w') as fp:
+        fp.write(TEST_SAMPLE)
+    args = ['-v', '--inc', '--inc-path', base, base]
+    testdir.inline_run(*args)
+    out = capsys.readouterr()[0].splitlines()
+    assert 'sub/test_x.py::test_foo PASSED' in out
