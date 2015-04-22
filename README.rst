@@ -9,6 +9,14 @@ pytest-incremental
 an incremental test runner (pytest plug-in)
 
 
+.. image:: https://travis-ci.org/pytest-dev/pytest-incremental.svg?branch=master
+  :target: https://travis-ci.org/pytest-dev/pytest-incremental
+
+.. image:: https://coveralls.io/repos/pytest-dev/pytest-incremental/badge.svg
+  :target: https://coveralls.io/r/pytest-dev/pytest-incremental
+
+
+
 What is an "incremental test runner" ?
 =======================================
 

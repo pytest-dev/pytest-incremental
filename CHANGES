@@ -6,7 +6,9 @@ Changes
 0.4.0
 ========
 
-- move development to git
+- move development to github
+- major re-rewrite, renamed all command line options
+- support for python 3
 
 
 0.3.0 (*2013-01-09*)
