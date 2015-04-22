@@ -7,7 +7,7 @@ python:
 
 install:
   - pip install .
-  - pip install -r dev-requirements.txt coveralls
+  - pip install -r dev-requirements.txt python-coveralls
 
 branches:
   only:
