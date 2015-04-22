@@ -80,9 +80,9 @@ class TestTasks(object):
         assert ' - tt/tt_mod2.py: mod1.py, mod2.py, tt/tt_mod2.py' in out
 
     def test_dot_graph(self, cmd_run, rm_generated_deps):
-        cmd_run.execute(cmd_run.params, ['dep-graph'])
+        cmd_run.execute(cmd_run.params, ['dep-dot'])
         got = cmd_run.outstream.getvalue().splitlines()
-        assert '.  dep-graph:dot' in got
+        assert '.  dep-dot' in got
         dot = open(os.path.join(SAMPLE_DIR, 'deps.dot')).read()
         got = dot.splitlines()
         assert '''"mod1.py"''' in got

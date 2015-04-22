@@ -384,22 +384,22 @@ class PyTasks(object):
             graph.write_dot(fp)
 
 
-    @gen_after(name='dep-graph', after_task='dep-json')
-    def gen_dep_graph(self, dot_file='deps.dot', png_file='deps.png'):
+    @gen_after(name='dep-dot', after_task='dep-json')
+    def gen_dep_graph_dot(self, dot_file='deps.dot'):
         """generate tasks for creating a `dot` graph of module imports"""
         yield {
-            'basename': 'dep-graph',
-            'name': 'dot',
+            'basename': 'dep-dot',
             'actions': [(self.action_write_dot, ['deps.dot', self.graph])],
             'file_dep': [self.json_file],
             'targets': [dot_file],
         }
 
+    @gen_after(name='dep-image', after_task='dep-json')
+    def gen_dep_graph_image(self, dot_file='deps.dot', png_file='deps.png'):
         # generate PNG with bottom-up tree
         dot_cmd = 'dot -Tpng -Grankdir=BT '
         yield {
-            'basename': 'dep-graph',
-            'name': 'jpeg',
+            'basename': 'dep-image',
             'actions': [dot_cmd + " -o %(targets)s %(dependencies)s"],
             'file_dep': [dot_file],
             'targets': [png_file],
@@ -438,7 +438,8 @@ class IncrementalTasks(PyTasks):
         '''
         yield self.gen_deps()
         yield self.gen_print_deps()
-        yield self.gen_dep_graph()
+        yield self.gen_dep_graph_dot()
+        yield self.gen_dep_graph_image()
         yield self.gen_outdated()
 
 
@@ -547,10 +548,11 @@ class IncrementalControl(object):
         """print list of all python modules being tracked and its dependencies"""
         self._run_doit(['print-deps'])
 
-    def create_dot_graph(self):
+    def create_dot_graph(self, graph_type='dot'):
         """create a graph of imports in dot format
         """
-        self._run_doit(['dep-graph'])
+        tasks = ['dep-dot', 'dep-image'] if graph_type=='image' else ['dep-dot']
+        self._run_doit(tasks)
 
 
 
@@ -579,9 +581,13 @@ def pytest_addoption(parser):
         dest="list_dependencies", default=False,
         help="print list of python modules being tracked and its dependencies")
     group.addoption(
-        '--inc-graph', action="store_true",
-        dest="graph_dependencies", default=False,
+        '--inc-graph', action="store_const", const='dot',
+        dest="graph_dependencies", default=None,
         help="create graph file of dependencies in dot format 'deps.dot'")
+    group.addoption(
+        '--inc-graph-image', action="store_const", const='image',
+        dest="graph_dependencies", default=None,
+        help="create graph file of dependencies in PNG format 'deps.png'")
 
 
 def pytest_configure(config):
@@ -624,7 +630,7 @@ class IncrementalPlugin(object):
         # command line options
         self.list_outdated = False
         self.list_dependencies = False
-        self.graph_dependencies = False
+        self.graph_dependencies = None
         self.run = None
 
         # IncrementalControl, set on sessionstart
@@ -709,7 +715,7 @@ class IncrementalPlugin(object):
                 self.control.print_deps()
             elif self.graph_dependencies:
                 print('Graph file written in deps.dot')
-                self.control.create_dot_graph()
+                self.control.create_dot_graph(self.graph_dependencies)
             return 0 # dont execute tests
 
         self.print_uptodate_test_files()
