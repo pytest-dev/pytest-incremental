@@ -22,6 +22,7 @@ Project Details
 
  - Website & docs - http://pytest-incremental.readthedocs.org
  - Project code + issue track on github - https://github.com/pytest-dev/pytest-incremental
+ - PyPI - https://pypi.python.org/pypi/pytest-incremental
  - Discussion group - http://groups.google.co.in/group/python-doit
 
 

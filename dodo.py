@@ -19,11 +19,11 @@ TEST_FILES = glob.glob("tests/test_*.py")
 
 def task_coverage():
     """show coverage for all modules including tests"""
+    all_files = " ".join(CODE_FILES + TEST_FILES)
     return {
         'actions': [
-            "coverage run `which py.test` ",
-            ("coverage report --show-missing %s" %
-             " ".join(CODE_FILES + TEST_FILES)),
+            'coverage run `which py.test` {}'.format(all_files),
+            "coverage report --show-missing {}".format(all_files),
         ],
         'verbosity': 2,
     }

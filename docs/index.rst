@@ -8,6 +8,11 @@ pytest-incremental: py.test plugin - incremenal test runner
 ===========================================================
 
 
+Github - https://github.com/pytest-dev/pytest-incremental
+
+PyPI - https://pypi.python.org/pypi/pytest-incremental
+
+
 What is an "incremental test runner" ?
 =======================================
 
@@ -29,7 +34,7 @@ Install
 
 pytest-incremental is tested on python  2.7 - 3.3-3.4
 
-``pip install pytest-incremental```
+``pip install pytest-incremental``
 
 ``python setup.py install``
 
@@ -81,7 +86,7 @@ You can check what are the actual dependencies detected by running the command::
  $ py.test --inc-deps
 
 for better visualization you can create a graph file in "dot" format
-(see `graphviz <http://www.graphviz.org/>`_ ::
+(see `graphviz <http://www.graphviz.org/>`_ )::
 
  $ py.test --inc-graph
 
