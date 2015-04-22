@@ -715,8 +715,10 @@ class IncrementalPlugin(object):
             elif self.list_dependencies:
                 self.control.print_deps()
             elif self.graph_dependencies:
-                print('Graph file written in deps.dot')
                 self.control.create_dot_graph(self.graph_dependencies)
+                print('Graph dot file written in deps.dot')
+                if self.graph_dependencies == 'image':
+                    print('Graph image file written in deps.png')
             return 0 # dont execute tests
 
         self.print_uptodate_test_files()

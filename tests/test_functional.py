@@ -60,7 +60,7 @@ def test_graph(testdir, capsys):
     args = ['-v', '--inc-graph', test]
     testdir.inline_run(*args)
     out = capsys.readouterr()[0].splitlines()
-    assert 'Graph file written in deps.dot' in out
+    assert 'Graph dot file written in deps.dot' in out
 
 
 def test_fail_always_reexecute_test(testdir):
