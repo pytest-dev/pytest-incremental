@@ -690,6 +690,7 @@ class IncrementalPlugin(object):
         outdated = self.control.get_outdated()
         # split items into 2 groups to be executed or not
         selected = []
+        deselected = []
         for colitem in items:
             path = str(colitem.fspath)
             if path in outdated:
@@ -697,9 +698,14 @@ class IncrementalPlugin(object):
                 selected.append(colitem)
             else:
                 self.uptodate_paths.add(path)
+                deselected.append(colitem)
 
         # TODO: reorder modules
         items[:] = selected
+
+        # include number of tests deselected in report footer
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
 
 
 

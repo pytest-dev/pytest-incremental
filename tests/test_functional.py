@@ -86,7 +86,7 @@ def test_foo():
 
 
 
-def test_ok_reexecute_only_if_changed(testdir):
+def test_ok_reexecute_only_if_changed(testdir, capsys):
     TEST_OK =  """
 def foo():
     return 'foo'
@@ -116,6 +116,8 @@ def test_bar():
     rec2 = testdir.inline_run(*args)
     results2 = get_results(rec2)
     assert len(results2) == 0
+    out = capsys.readouterr()[0].splitlines()
+    assert '== 1 deselected' in out[-1]
 
     # TODO remove when py.test 2.8 is released
     if 'test_ok_reexecute_only_if_changed' in sys.modules: # pragma: no cover
