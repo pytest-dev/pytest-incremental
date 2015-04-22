@@ -1,5 +1,4 @@
 import sys
-import time
 
 pytest_plugins = 'pytester', 'incremental'
 
@@ -118,7 +117,8 @@ def test_bar():
     assert len(results2) == 0
 
     # TODO remove when py.test 2.8 is released
-    del sys.modules['test_ok_reexecute_only_if_changed']
+    if 'test_ok_reexecute_only_if_changed' in sys.modules: # pragma: no cover
+        sys.modules['test_ok_reexecute_only_if_changed']
 
     # change module
     test.write(TEST_OK_2)

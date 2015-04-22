@@ -13,17 +13,15 @@ __version__ = (0, 4, 'dev0')
 
 import os
 import ast
-import fcntl
 import json
 import functools
-from collections import deque, defaultdict
+from collections import defaultdict
 
 import six
 from six import StringIO
 
 
 from doit.task import Task, DelayedLoader
-from doit.dependency import Dependency
 from doit.cmd_base import ModuleTaskLoader
 from doit.cmd_run import Run
 from doit.reporter import ZeroReporter

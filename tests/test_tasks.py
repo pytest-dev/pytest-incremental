@@ -3,11 +3,10 @@ import os
 from six import StringIO
 import py
 import pytest
-from doit.cmdparse import CmdParse
 from doit.cmd_run import Run
 from doit.cmd_base import DodoTaskLoader
 
-from pytest_incremental import PyTasks, IncrementalControl, OutdatedReporter
+from pytest_incremental import IncrementalControl, OutdatedReporter
 
 
 #### fixture for "doit.db". create/remove for every test
