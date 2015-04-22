@@ -1,0 +1,27 @@
+language: python
+python:
+    - "2.7"
+    - "3.3"
+    - "3.4"
+
+
+install:
+  - pip install -r dev-requirements.txt coveralls
+
+branches:
+  only:
+    - master
+    - test
+
+script:
+   - doit pyflakes
+   - py.test
+   - if [[ $TRAVIS_PYTHON_VERSION == '3.4' ]]; then doit coverage; fi
+
+after_success:
+  - if [[ $TRAVIS_PYTHON_VERSION == '3.4' ]]; then coveralls; fi
+
+notifications:
+    email:
+        on_success: change
+        on_failure: change

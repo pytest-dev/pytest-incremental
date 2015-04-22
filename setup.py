@@ -30,9 +30,8 @@ setup(name = 'pytest-incremental',
       py_modules = ['pytest_incremental'],
       install_requires = [
           'six',
-          'doit > 0.27.9',
+          'doit >= 0.28.0',
           'pytest',
-          'pytest-xdist',
       ],
       entry_points = {
         'pytest11': ['pytest_incremental = pytest_incremental'],

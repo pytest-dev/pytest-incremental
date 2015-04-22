@@ -118,7 +118,7 @@ def test_bar():
 
     # TODO remove when py.test 2.8 is released
     if 'test_ok_reexecute_only_if_changed' in sys.modules: # pragma: no cover
-        sys.modules['test_ok_reexecute_only_if_changed']
+        del sys.modules['test_ok_reexecute_only_if_changed']
 
     # change module
     test.write(TEST_OK_2)
