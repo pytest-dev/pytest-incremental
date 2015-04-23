@@ -6,6 +6,7 @@ import pytest
 from doit.cmd_run import Run
 from doit.cmd_base import DodoTaskLoader
 
+from pytest_incremental import IncrementalTasks
 from pytest_incremental import IncrementalControl, OutdatedReporter
 
 
@@ -77,7 +78,8 @@ class TestTasks(object):
         out = capsys.readouterr()[0].splitlines()
         assert '.  dep-json' in got
         assert ' - mod2.py: mod1.py, mod2.py' in out
-        assert ' - tt/tt_mod2.py: mod1.py, mod2.py, tt/tt_mod2.py' in out
+        mod2_deps = 'mod1.py, mod2.py, tt/conftest.py, tt/tt_mod2.py'
+        assert ' - tt/tt_mod2.py: ' + mod2_deps in out
 
     def test_dot_graph(self, cmd_run, rm_generated_deps):
         cmd_run.execute(cmd_run.params, ['dep-dot'])
@@ -89,6 +91,13 @@ class TestTasks(object):
         assert '''"mod2.py" -> "mod1.py"''' in got
         assert '''"tt/tt_mod1.py" -> "mod1.py"''' in got
         assert '''"tt/tt_mod2.py" -> "mod2.py"''' in got
+
+    def test_png_graph(self, cmd_run, rm_generated_deps):
+        # dumb test just check task is created
+        IncrementalTasks(['xxx'], ['yyy'])
+        cmd_run.execute(cmd_run.params, ['dep-image'])
+        got = cmd_run.outstream.getvalue().splitlines()
+        assert '.  dep-image' in got
 
 
 
@@ -122,13 +131,15 @@ class TestOutdatedRerporter(object):
 
 
 class TestIncrementalControl(object):
+    tt_conf = os.path.join(SAMPLE_DIR, 'tt/conftest.py')
     tt_mod1 = os.path.join(SAMPLE_DIR, 'tt/tt_mod1.py')
     tt_mod2 = os.path.join(SAMPLE_DIR, 'tt/tt_mod2.py')
     def test_py_files(self):
         control = IncrementalControl([SAMPLE_DIR])
-        assert len(control.py_files) == 5
+        assert len(control.py_files) == 6
         assert os.path.join(SAMPLE_DIR, 'mod1.py') in control.py_files
         assert os.path.join(SAMPLE_DIR, 'mod2.py') in control.py_files
+        assert self.tt_conf in control.py_files
         assert self.tt_mod1 in control.py_files
         assert self.tt_mod2 in control.py_files
 
@@ -152,12 +163,14 @@ class TestIncrementalControl(object):
         control.test_files = [self.tt_mod1, self.tt_mod2]
         control.print_deps()
         out = capsys.readouterr()[0].splitlines()
-        assert len(out) == 5
+        assert len(out) == 6
         assert ' - dodo.py: dodo.py' in out
         assert ' - mod1.py: mod1.py' in out
         assert ' - mod2.py: mod1.py, mod2.py' in out
-        assert ' - tt/tt_mod1.py: mod1.py, tt/tt_mod1.py' in out
-        assert ' - tt/tt_mod2.py: mod1.py, mod2.py, tt/tt_mod2.py' in out
+        assert ' - tt/conftest.py: tt/conftest.py' in out
+        assert ' - tt/tt_mod1.py: mod1.py, tt/conftest.py, tt/tt_mod1.py' in out
+        mod2_deps = 'mod1.py, mod2.py, tt/conftest.py, tt/tt_mod2.py'
+        assert ' - tt/tt_mod2.py: ' + mod2_deps in out
 
     def test_dot_graph(self, depfile_name, rm_generated_deps):
         control = IncrementalControl([SAMPLE_DIR])
@@ -166,9 +179,12 @@ class TestIncrementalControl(object):
         control.create_dot_graph()
         dot = open(os.path.join(SAMPLE_DIR, 'deps.dot')).read()
         out = dot.splitlines()
-        assert len(out) == 7
+        assert len(out) == 10
         assert '"dodo.py"' in out
         assert '"mod1.py"' in out
         assert '"mod2.py" -> "mod1.py"' in out
+        assert '"tt/conftest.py"' in out
         assert '"tt/tt_mod1.py" -> "mod1.py"' in out
         assert '"tt/tt_mod2.py" -> "mod2.py"' in out
+        assert '"tt/tt_mod1.py" -> "tt/conftest.py"' in out
+        assert '"tt/tt_mod2.py" -> "tt/conftest.py"' in out

@@ -127,8 +127,6 @@ Limitations
 AST). But given the very dynamic nature of python there are still some cases
 that a module can be affected by a module that are not detected.
 
-* `from package import *` modules imported from __all__ in a package are not
-  counted as a dependency
 * modules imported not using the *import* statement
 * modules not explicitly imported but used at run-time (i.e. conftest.py when
   running your tests with pytest)

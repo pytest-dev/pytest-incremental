@@ -194,7 +194,7 @@ class ModuleSet(object):
 class GNode(object):
     '''represents a node in a direct graph
 
-    Designed to efficiently return a list of all nodes in a sub-graph.
+    Designed to return a list of all nodes in a sub-graph.
     The sub-graph from each node is built on demand and cached after built.
     '''
     def __init__(self, name):
@@ -202,10 +202,6 @@ class GNode(object):
         self.deps = set() # of direct GNode deps
         # all_deps are lazily calculated and cached
         self._all_deps = None # set of all (recursive) deps names
-        # when a cyclic dependency is found copy_from indicated
-        # which GNode depepencies should be copied from (all nodes
-        # in a cycle have the same set of dependencies)
-        self.copy_from = None
 
     def __repr__(self):
         return "<GNode({})>".format(self.name)
@@ -300,13 +296,19 @@ class PyTasks(object):
         self.py_mods = ModuleSet(self.py_files)
         self._graph = None # DepGraph cached on first use
 
+
+    def create_graph(self):
+        """create Graph from json file"""
+        with open(self.json_file) as fp:
+            deps = json.load(fp)
+        return DepGraph(deps)
+
+
     @property
     def graph(self):
-        """create Graph from json file"""
+        """cache graph object"""
         if self._graph is None:
-            with open(self.json_file) as fp:
-                deps = json.load(fp)
-            self._graph = DepGraph(deps)
+            self._graph = self.create_graph()
         return self._graph
 
 
@@ -414,6 +416,19 @@ class IncrementalTasks(PyTasks):
     def __init__(self, pyfiles, test_files=None, **kwargs):
         PyTasks.__init__(self, pyfiles, **kwargs)
         self.test_files = test_files
+
+    def create_graph(self):
+        """overwrite to add implicit dep to conftest file"""
+        graph = super(IncrementalTasks, self).create_graph()
+        conftest = [mod for mod in six.iterkeys(graph.nodes)
+                    if mod.endswith('conftest.py')]
+        for conf in conftest:
+            conftest_node = graph.nodes[conf]
+            base_dir = os.path.dirname(conf)
+            for path, node in six.iteritems(graph.nodes):
+                if path.startswith(base_dir) and path != conf:
+                    node.deps.add(conftest_node)
+        return graph
 
     def check_success(self):
         """check if task should succeed based on GLOBAL parameter"""
