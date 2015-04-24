@@ -279,13 +279,33 @@ class DepGraph(object):
             for source in target.deps:
                 targets[source.name].append(target.name)
 
-        result = [n for n in self.nodes if num_src[n]==0]
-        for n in result:
-            for target in targets[n]:
-                num_src[target] -= 1
-                if num_src[target] == 0:
-                    result.append(target)
-        assert len(result) == len(self.nodes)
+        result = []
+        next_level = [n for n in num_src if num_src[n]==0]
+        # each iteration is get all nodes from a level
+        while len(result) != len(self.nodes):
+
+            # if there is a cycle all nodes have one or more srcs
+            if not next_level:
+                lowest = None
+                for node_name, srcs in num_src.items():
+                    if lowest is None or srcs < lowest:
+                        lowest = srcs
+                        next_level = [node_name]
+                    elif srcs == lowest:
+                        next_level.append(node_name)
+
+            # sort nodes of this level
+            result.extend(sorted(next_level))
+
+            # process nodes preparing for next level
+            level = next_level
+            next_level = []
+            for n in level:
+                for target in targets[n]:
+                    num_src[target] -= 1
+                    if num_src[target] == 0:
+                        next_level.append(target)
+
         return result
 
 
@@ -422,7 +442,7 @@ class PyTasks(object):
     @gen_after(name='dep-image', after_task='dep-json')
     def gen_dep_graph_image(self, dot_file='deps.dot', png_file='deps.png'):
         # generate PNG with bottom-up tree
-        dot_cmd = 'dot -Tpng -Grankdir=BT '
+        dot_cmd = 'dot -Tpng '
         yield {
             'basename': 'dep-image',
             'actions': [dot_cmd + " -o %(targets)s %(dependencies)s"],
