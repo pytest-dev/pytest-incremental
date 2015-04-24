@@ -108,3 +108,12 @@ class Test_DepGraph(object):
         assert '"b" -> "d"' in lines
         assert '"d" -> "c"' in lines
         assert '"d" -> "e"' in lines
+
+
+    def test_topsort(self):
+        graph = DepGraph({
+            'a': ['c'],
+            'b': [],
+            'c': ['b'],
+        })
+        assert ['b', 'c', 'a'] == graph.topsort()

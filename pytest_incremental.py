@@ -267,6 +267,29 @@ class DepGraph(object):
         stream.write("}\n")
 
 
+    def topsort(self):
+        '''return list of node names in topological order
+
+        If A has deps [B, C]. We say that A is a target, B and C are sources
+        '''
+        num_src = defaultdict(int)
+        targets = defaultdict(list)
+        for target in self.nodes.values():
+            num_src[target.name] = len(target.deps)
+            for source in target.deps:
+                targets[source.name].append(target.name)
+
+        result = [n for n in self.nodes if num_src[n]==0]
+        for n in result:
+            for target in targets[n]:
+                num_src[target] -= 1
+                if num_src[target] == 0:
+                    result.append(target)
+        assert len(result) == len(self.nodes)
+        return result
+
+
+
 ######### start doit section
 
 def gen_after(name, after_task):
@@ -515,16 +538,18 @@ class IncrementalControl(object):
                     this_modules.extend(self._get_pkg_modules(sub_path))
         return this_modules
 
-    def _run_doit(self, sel_tasks, doit_vars=None):
+    def _run_doit(self, sel_tasks, reporter=None, doit_vars=None):
         """load this file as dodo file to collect tasks"""
         inc = IncrementalTasks(self.py_files, test_files=list(self.test_files))
         output = StringIO()
         config = {
             'dep_file': self.DB_FILE,
             'continue': True,
-            'reporter': OutdatedReporter,
             'outfile': output,
         }
+        if reporter:
+            config['reporter'] = reporter
+
         ctx = {
             'tasks_generator': inc,
             'DOIT_CONFIG': config,
@@ -537,7 +562,7 @@ class IncrementalControl(object):
         cmd = Run(task_loader=loader)
         cmd.parse_execute(sel_tasks)
         output.seek(0)
-        return output.read()
+        return inc.graph, output.read()
 
 
     def get_outdated(self):
@@ -548,8 +573,15 @@ class IncrementalControl(object):
         :return set(str): list of outdated files
         """
         outdated_tasks = ['outdated']
-        output_str = self._run_doit(outdated_tasks)
-        return set(json.loads(output_str))
+        graph, output_str = self._run_doit(outdated_tasks,
+                                           reporter=OutdatedReporter)
+        outdated_list = json.loads(output_str)
+        # dict of outdated with position
+        outdated = {}
+        order = {p:i for i,p in enumerate(graph.topsort())}
+        for test in outdated_list:
+            outdated[test] = order[test]
+        return outdated
 
     def save_success(self, success):
         """mark doit test tasks as sucessful"""
@@ -702,20 +734,24 @@ class IncrementalPlugin(object):
             return
 
         # execute doit to figure out which test modules are outdated
+        # dict test_moodule path: relative order position
         outdated = self.control.get_outdated()
+
         # split items into 2 groups to be executed or not
-        selected = []
+        item_by_mod = defaultdict(list)
         deselected = []
         for colitem in items:
             path = str(colitem.fspath)
             if path in outdated:
                 self.outofdate[path].append(colitem.nodeid)
-                selected.append(colitem)
+                item_by_mod[path].append(colitem)
             else:
                 self.uptodate_paths.add(path)
                 deselected.append(colitem)
 
-        # TODO: reorder modules
+        selected = []
+        for path, _ in sorted(outdated.items(), key=lambda x: x[1]):
+            selected.extend(item_by_mod[path])
         items[:] = selected
 
         # include number of tests deselected in report footer

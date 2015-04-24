@@ -150,11 +150,11 @@ class TestIncrementalControl(object):
 
         # at first all are outdated
         got = control.get_outdated()
-        assert got == set([self.tt_mod1, self.tt_mod2])
+        assert set(got.keys()) == set([self.tt_mod1, self.tt_mod2])
 
         # save one success and check outdated
         control.save_success([self.tt_mod2])
-        assert control.get_outdated() == set([self.tt_mod1])
+        assert set(control.get_outdated().keys()) == set([self.tt_mod1])
 
 
     def test_list_deps(self, depfile_name, rm_generated_deps, capsys):
