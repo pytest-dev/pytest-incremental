@@ -88,9 +88,9 @@ class TestTasks(object):
         dot = open(os.path.join(SAMPLE_DIR, 'deps.dot')).read()
         got = dot.splitlines()
         assert '''"mod1.py"''' in got
-        assert '''"mod2.py" -> "mod1.py"''' in got
-        assert '''"tt/tt_mod1.py" -> "mod1.py"''' in got
-        assert '''"tt/tt_mod2.py" -> "mod2.py"''' in got
+        assert '''"mod1.py" -> "mod2.py"''' in got
+        assert '''"mod1.py" -> "tt/tt_mod1.py"''' in got
+        assert '''"mod2.py" -> "tt/tt_mod2.py"''' in got
 
     def test_png_graph(self, cmd_run, rm_generated_deps):
         # dumb test just check task is created
@@ -182,9 +182,9 @@ class TestIncrementalControl(object):
         assert len(out) == 10
         assert '"dodo.py"' in out
         assert '"mod1.py"' in out
-        assert '"mod2.py" -> "mod1.py"' in out
+        assert '"mod1.py" -> "mod2.py"' in out
         assert '"tt/conftest.py"' in out
-        assert '"tt/tt_mod1.py" -> "mod1.py"' in out
-        assert '"tt/tt_mod2.py" -> "mod2.py"' in out
-        assert '"tt/tt_mod1.py" -> "tt/conftest.py"' in out
-        assert '"tt/tt_mod2.py" -> "tt/conftest.py"' in out
+        assert '"mod1.py" -> "tt/tt_mod1.py"' in out
+        assert '"mod2.py" -> "tt/tt_mod2.py"' in out
+        assert '"tt/conftest.py" -> "tt/tt_mod1.py"' in out
+        assert '"tt/conftest.py" -> "tt/tt_mod2.py"' in out

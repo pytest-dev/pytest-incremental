@@ -261,7 +261,7 @@ class DepGraph(object):
             if node.deps:
                 for dep in sorted(node.deps, key=lambda x: x.name):
                     dep_path = os.path.relpath(dep.name)
-                    stream.write('"{}" -> "{}"\n'.format(node_path, dep_path))
+                    stream.write('"{}" -> "{}"\n'.format(dep_path, node_path))
             else:
                 stream.write('"{}"\n'.format(node_path))
         stream.write("}\n")
