@@ -146,3 +146,12 @@ class Test_DepGraph(object):
         })
         assert ['a', 'b', 'c'] == graph.topsort()
 
+    def test_topsort_cycle_plus(self):
+        graph = DepGraph({
+            'a': ['b', 'c'],
+            'c': ['a', 'b'],
+            'b': ['c', 'a', 'd'],
+            'd': []
+        })
+        assert ['d', 'a', 'b', 'c'] == graph.topsort()
+

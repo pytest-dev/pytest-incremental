@@ -272,7 +272,7 @@ class DepGraph(object):
 
         If A has deps [B, C]. We say that A is a target, B and C are sources
         '''
-        num_src = defaultdict(int)
+        num_src = {}
         targets = defaultdict(list)
         for target in self.nodes.values():
             num_src[target.name] = len(target.deps)
@@ -281,9 +281,9 @@ class DepGraph(object):
 
         result = []
         next_level = [n for n in num_src if num_src[n]==0]
+
         # each iteration is get all nodes from a level
         while len(result) != len(self.nodes):
-
             # if there is a cycle all nodes have one or more srcs
             if not next_level:
                 lowest = None
@@ -294,6 +294,11 @@ class DepGraph(object):
                     elif srcs == lowest:
                         next_level.append(node_name)
 
+            # remove elements from num_src so they are not taken account
+            # when removing a cycle.
+            for n in next_level:
+                del num_src[n]
+
             # sort nodes of this level
             result.extend(sorted(next_level))
 
@@ -302,10 +307,13 @@ class DepGraph(object):
             next_level = []
             for n in level:
                 for target in targets[n]:
-                    num_src[target] -= 1
+                    try:
+                        num_src[target] -= 1
+                    # cycle might already have remove target
+                    except KeyError:
+                        continue
                     if num_src[target] == 0:
                         next_level.append(target)
-
         return result
 
 
