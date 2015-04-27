@@ -59,7 +59,7 @@ def cmd_run(request, depfile_name):
 def rm_generated_deps(request):
     """remove deps.* files generated from running tasks on sample-inc folder"""
     def remove():
-        for path in ('deps.json', 'deps.dot', 'deps.png'):
+        for path in ('deps.json', 'deps.dot', 'deps.svg'):
             try:
                 os.remove(os.path.join(SAMPLE_DIR, path))
             except OSError:
@@ -92,7 +92,7 @@ class TestTasks(object):
         assert '''"mod1.py" -> "tt/tt_mod1.py"''' in got
         assert '''"mod2.py" -> "tt/tt_mod2.py"''' in got
 
-    def test_png_graph(self, cmd_run, rm_generated_deps):
+    def test_img_graph(self, cmd_run, rm_generated_deps):
         # dumb test just check task is created
         IncrementalTasks(['xxx'], ['yyy'])
         cmd_run.execute(cmd_run.params, ['dep-image'])

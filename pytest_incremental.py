@@ -452,14 +452,14 @@ class PyTasks(object):
         }
 
     @gen_after(name='dep-image', after_task='dep-json')
-    def gen_dep_graph_image(self, dot_file='deps.dot', png_file='deps.png'):
-        # generate PNG with bottom-up tree
-        dot_cmd = 'dot -Tpng '
+    def gen_dep_graph_image(self, dot_file='deps.dot', img_file='deps.svg'):
+        # generate SVG with bottom-up tree
+        dot_cmd = 'dot -Tsvg '
         yield {
             'basename': 'dep-image',
             'actions': [dot_cmd + " -o %(targets)s %(dependencies)s"],
             'file_dep': [dot_file],
-            'targets': [png_file],
+            'targets': [img_file],
         }
 
 
@@ -666,7 +666,7 @@ def pytest_addoption(parser):
     group.addoption(
         '--inc-graph-image', action="store_const", const='image',
         dest="graph_dependencies", default=None,
-        help="create graph file of dependencies in PNG format 'deps.png'")
+        help="create graph file of dependencies in SVG format 'deps.svg'")
 
 
 def pytest_configure(config):
@@ -807,7 +807,7 @@ class IncrementalPlugin(object):
                 self.control.create_dot_graph(self.graph_dependencies)
                 print('Graph dot file written in deps.dot')
                 if self.graph_dependencies == 'image':
-                    print('Graph image file written in deps.png')
+                    print('Graph image file written in deps.svg')
             return 0 # dont execute tests
 
         self.print_uptodate_test_files()
