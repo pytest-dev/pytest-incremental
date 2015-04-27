@@ -200,6 +200,7 @@ class GNode(object):
     def __init__(self, name):
         self.name = name
         self.deps = set() # of direct GNode deps
+        self.implicit_deps = []
         # all_deps are lazily calculated and cached
         self._all_deps = None # set of all (recursive) deps names
 
@@ -212,6 +213,8 @@ class GNode(object):
 
     def all_deps(self):
         """return set of GNode with all deps from this node (including self)"""
+        if self._all_deps is not None:
+            return self._all_deps
         todo = set()
         done = set()
         todo.add(self)
@@ -222,6 +225,7 @@ class GNode(object):
             else:
                 todo.update(n for n in node.deps if n not in done)
                 done.add(node)
+        done.update(self.implicit_deps)
         self._all_deps = done
         return done
 
@@ -478,7 +482,7 @@ class IncrementalTasks(PyTasks):
             base_dir = os.path.dirname(conf)
             for path, node in six.iteritems(graph.nodes):
                 if path.startswith(base_dir) and path != conf:
-                    node.deps.add(conftest_node)
+                    node.implicit_deps.append(conftest_node)
         return graph
 
     def check_success(self):

@@ -33,6 +33,18 @@ class Test_GNode(object):
         assert dep3 in all_deps
 
 
+    def test_all_deps_include_implicit_dep(self):
+        node = GNode('foo')
+        dep1 = GNode('bar')
+        conf = GNode('conf')
+        node.add_dep(dep1)
+        node.implicit_deps.append(conf)
+        all_deps = node.all_deps()
+        assert 3 == len(all_deps)
+        assert node in all_deps
+        assert dep1 in all_deps
+        assert conf in all_deps
+
     def test_recursive1(self):
         node = GNode('foo')
         dep1 = GNode('bar1')
@@ -85,6 +97,19 @@ class Test_GNode(object):
         assert n3.all_deps() == set([n2, n3])
         assert n2.all_deps() == set([n2, n3])
         assert n1.all_deps() == set([n1, n2, n3])
+
+    def test_all_deps_cached(self):
+        node = GNode('foo')
+        dep1 = GNode('bar')
+        dep2 = GNode('baz')
+        node.add_dep(dep1)
+        all_deps = node.all_deps()
+        assert 2 == len(all_deps)
+        assert node in all_deps
+        assert dep1 in all_deps
+        # added dep not seen because of cache
+        node.add_dep(dep2)
+        assert 2 == len(node.all_deps())
 
 
 
@@ -154,4 +179,3 @@ class Test_DepGraph(object):
             'd': []
         })
         assert ['d', 'a', 'b', 'c'] == graph.topsort()
-

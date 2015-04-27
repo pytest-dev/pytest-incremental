@@ -179,12 +179,11 @@ class TestIncrementalControl(object):
         control.create_dot_graph()
         dot = open(os.path.join(SAMPLE_DIR, 'deps.dot')).read()
         out = dot.splitlines()
-        assert len(out) == 10
+        assert len(out) == 8
         assert '"dodo.py"' in out
         assert '"mod1.py"' in out
         assert '"mod1.py" -> "mod2.py"' in out
         assert '"tt/conftest.py"' in out
         assert '"mod1.py" -> "tt/tt_mod1.py"' in out
         assert '"mod2.py" -> "tt/tt_mod2.py"' in out
-        assert '"tt/conftest.py" -> "tt/tt_mod1.py"' in out
-        assert '"tt/conftest.py" -> "tt/tt_mod2.py"' in out
+
