@@ -128,11 +128,11 @@ class Test_DepGraph(object):
         output = StringIO()
         self.graph.write_dot(output)
         lines = output.getvalue().splitlines()
-        assert '"c" -> "a"' in lines
-        assert '"b" -> "a"' in lines
-        assert '"d" -> "b"' in lines
-        assert '"c" -> "d"' in lines
-        assert '"e" -> "d"' in lines
+        assert '"a" -> "c"' in lines
+        assert '"a" -> "b"' in lines
+        assert '"b" -> "d"' in lines
+        assert '"d" -> "c"' in lines
+        assert '"d" -> "e"' in lines
 
 
     def test_topsort_simple(self):

@@ -9,7 +9,7 @@ Copyright (c) 2011-2015 Eduardo Naufel Schettino
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = (0, 4, 'dev0')
+__version__ = (0, 4, 0)
 
 import os
 import ast
@@ -256,7 +256,7 @@ class DepGraph(object):
         """write dot file
         :param stream: Any object with a `write()` method
         """
-        stream.write("digraph imports {\n")
+        stream.write("digraph imports {\nrankdir = BT\n")
         for node in sorted(self.nodes.values(), key=lambda x:x.name):
             # FIXME add option to include test files or not
             #if node.name.startswith('test'):
@@ -265,7 +265,7 @@ class DepGraph(object):
             if node.deps:
                 for dep in sorted(node.deps, key=lambda x: x.name):
                     dep_path = os.path.relpath(dep.name)
-                    stream.write('"{}" -> "{}"\n'.format(dep_path, node_path))
+                    stream.write('"{}" -> "{}"\n'.format(node_path, dep_path))
             else:
                 stream.write('"{}"\n'.format(node_path))
         stream.write("}\n")
