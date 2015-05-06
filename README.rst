@@ -15,6 +15,10 @@ an incremental test runner (pytest plug-in)
 .. image:: https://coveralls.io/repos/pytest-dev/pytest-incremental/badge.svg
   :target: https://coveralls.io/r/pytest-dev/pytest-incremental
 
+*pytest-incremental* analyses your project structure and file
+modifications between test-runs
+to modify the order tests are executed and de-select tests.
+This allows a much faster feedback for interactive test execution.
 
 
 Project Details

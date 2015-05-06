@@ -9,7 +9,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.rst'), 'r') as fp:
 
 setup(name = 'pytest-incremental',
       description = 'an incremental test runner (pytest plugin)',
-      version = '0.4.dev1',
+      version = '0.4.0',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
@@ -30,7 +30,7 @@ setup(name = 'pytest-incremental',
       py_modules = ['pytest_incremental'],
       install_requires = [
           'six',
-          'doit >= 0.28.0',
+          'doit == 0.28.0',
           'pytest',
       ],
       entry_points = {

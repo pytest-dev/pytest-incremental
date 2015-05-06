@@ -2,6 +2,7 @@
 import glob
 
 from doitpy.pyflakes import Pyflakes
+from doitpy import docs
 
 
 DOIT_CONFIG = {'default_tasks': ['pyflakes',]}
@@ -28,3 +29,7 @@ def task_coverage():
         'verbosity': 2,
     }
 
+
+def task_docs():
+    doc_files = glob.glob('docs/*.rst') + ['README.rst', ]
+    yield docs.spell(doc_files, 'docs/dictionary.txt')

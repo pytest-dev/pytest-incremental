@@ -3,12 +3,13 @@
 Changes
 =======
 
-0.4.0
-========
+0.4.0 (*2015-05-07*)
+====================
 
 - move development to github
 - major re-rewrite, renamed all command line options
 - support for python 3
+- re-ordering of test execution
 
 
 0.3.0 (*2013-01-09*)
