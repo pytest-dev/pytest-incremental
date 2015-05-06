@@ -109,13 +109,14 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 # on_rtd is whether we are on readthedocs.org
-import os
-on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
-if not on_rtd:  # only import and set the theme if we're building docs locally
-    html_theme = 'sphinxdoc'
-# else RTD use its default theme
+# import os
+# on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
+# if not on_rtd:  # only import and set the theme if we're building docs locally
+#     html_theme = 'sphinxdoc'
+# # else RTD use its default theme
+html_theme = 'sphinxdoc'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
