@@ -9,7 +9,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.rst'), 'r') as fp:
 
 setup(name = 'pytest-incremental',
       description = 'an incremental test runner (pytest plugin)',
-      version = '0.4.0',
+      version = '0.4.1',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
