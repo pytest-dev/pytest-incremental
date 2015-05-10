@@ -26,7 +26,5 @@ Both projects have a similar goal but have completely different implementations.
 - *testmon* does not re-order tests according to the source structure
 - because *testmon* traces the code execution the test execution is slower
   than normally
-- *testmon* suffers from the same problems as *coverage.py* when using
-  the code uses more than one process
 
 
