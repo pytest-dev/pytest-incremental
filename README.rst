@@ -24,7 +24,7 @@ This allows a much faster feedback for interactive test execution.
 Project Details
 ===============
 
- - Website & docs - http://pytest-incremental.readthedocs.org
+ - Website & docs - https://pytest-incremental.readthedocs.io
  - Project code + issue track on github - https://github.com/pytest-dev/pytest-incremental
  - PyPI - https://pypi.python.org/pypi/pytest-incremental
  - Discussion group - http://groups.google.co.in/group/python-doit
