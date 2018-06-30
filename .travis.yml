@@ -1,8 +1,8 @@
 language: python
 python:
     - "2.7"
-    - "3.3"
-    - "3.4"
+    - "3.5"
+    - "3.6"
 
 
 install:
@@ -17,10 +17,10 @@ branches:
 script:
    - doit pyflakes
    - py.test
-   - if [[ $TRAVIS_PYTHON_VERSION == '3.4' ]]; then doit coverage; fi
+   - if [[ $TRAVIS_PYTHON_VERSION == '3.6' ]]; then doit coverage; fi
 
 after_success:
-  - if [[ $TRAVIS_PYTHON_VERSION == '3.4' ]]; then coveralls; fi
+  - if [[ $TRAVIS_PYTHON_VERSION == '3.6' ]]; then coveralls; fi
 
 notifications:
     email:

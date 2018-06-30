@@ -1,7 +1,7 @@
 import os
 import sys
 
-pytest_plugins = 'pytester', 'incremental'
+pytest_plugins = 'pytester', 'pytest_incremental'
 
 
 def get_results(recorder):
@@ -193,4 +193,7 @@ def test_inc_path(testdir, capsys):
     args = ['-v', '--inc', '--inc-path', base, base]
     testdir.inline_run(*args)
     out = capsys.readouterr()[0].splitlines()
-    assert 'sub/test_x.py::test_foo PASSED' in out
+    assert any(
+        line.startswith('sub/test_x.py::test_foo PASSED')
+        for line in out
+    )
