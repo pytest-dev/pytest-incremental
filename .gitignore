@@ -7,7 +7,7 @@ docs/_build
 .coverage
 *.doit.db
 dist
-.cache
+.pytest_cache
 .tox
 .pytest-incremental*
 MANIFEST
