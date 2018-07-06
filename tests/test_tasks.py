@@ -1,7 +1,7 @@
 import os
+import re
 
 from six import StringIO
-import py
 import pytest
 from doit.cmd_run import Run
 from doit.cmd_base import DodoTaskLoader
@@ -30,7 +30,7 @@ def remove_db(filename):
 def depfile_name(request):
     # copied from tempdir plugin
     name = request._pyfuncitem.name
-    name = py.std.re.sub(r"[\W]", "_", name)
+    name = re.sub(r"[\W]", "_", name)
     my_tmpdir = request.config._tmpdirhandler.mktemp(name, numbered=True)
     depfile_name = (os.path.join(my_tmpdir.strpath, "testdb"))
 
