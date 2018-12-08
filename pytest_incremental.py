@@ -6,9 +6,6 @@ The MIT License - see LICENSE file
 Copyright (c) 2011-2015 Eduardo Naufel Schettino
 """
 
-from __future__ import print_function
-from __future__ import unicode_literals
-
 __version__ = (0, 4, 2)
 
 import os
@@ -16,9 +13,7 @@ import ast
 import json
 import functools
 from collections import defaultdict
-
-import six
-from six import StringIO
+from io import StringIO
 
 
 from doit.task import Task, DelayedLoader
@@ -475,12 +470,12 @@ class IncrementalTasks(PyTasks):
     def create_graph(self):
         """overwrite to add implicit dep to conftest file"""
         graph = super(IncrementalTasks, self).create_graph()
-        conftest = [mod for mod in six.iterkeys(graph.nodes)
+        conftest = [mod for mod in graph.nodes.keys()
                     if mod.endswith('conftest.py')]
         for conf in conftest:
             conftest_node = graph.nodes[conf]
             base_dir = os.path.dirname(conf)
-            for path, node in six.iteritems(graph.nodes):
+            for path, node in graph.nodes.items():
                 if path.startswith(base_dir) and path != conf:
                     node.implicit_deps.append(conftest_node)
         return graph
@@ -534,7 +529,7 @@ class OutdatedReporter(ZeroReporter):
 
     def complete_run(self):
         outdated_info = json.dumps(self.outdated)
-        self.outstream.write(six.u(outdated_info))
+        self.outstream.write(outdated_info)
 
 
 ##################### end doit section

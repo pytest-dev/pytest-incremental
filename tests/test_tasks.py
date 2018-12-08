@@ -1,7 +1,7 @@
 import os
 import re
 
-from six import StringIO
+from io import StringIO
 import pytest
 from doit.cmd_run import Run
 from doit.cmd_base import DodoTaskLoader
