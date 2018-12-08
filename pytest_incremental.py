@@ -6,182 +6,21 @@ The MIT License - see LICENSE file
 Copyright (c) 2011-2015 Eduardo Naufel Schettino
 """
 
-__version__ = (0, 4, 2)
+__version__ = (0, 5, 0)
 
 import os
-import ast
 import json
 import functools
 from collections import defaultdict
 from io import StringIO
 
-
+from import_deps import ModuleSet, PyModule
 from doit.task import Task, DelayedLoader
 from doit.cmd_base import ModuleTaskLoader
 from doit.cmd_run import Run
 from doit.reporter import ZeroReporter
 from doit import doit_cmd
 from doit.tools import config_changed
-
-############# find imports using AST
-
-def _file2ast(file_name):
-    """get ast-tree from file_name"""
-    with open(file_name, 'r') as fp:
-        text = fp.read()
-    return ast.parse(text, file_name)
-
-class _ImportsFinder(ast.NodeVisitor):
-    """find all imports
-    :ivar imports: (list - tuple) (module, name, asname, level)
-    """
-    def __init__(self):
-        ast.NodeVisitor.__init__(self)
-        self.imports = []
-
-    def visit_Import(self, node):
-        """callback for 'import' statement"""
-        self.imports.extend((None, n.name, n.asname, None)
-                            for n in node.names)
-        ast.NodeVisitor.generic_visit(self, node)
-
-    def visit_ImportFrom(self, node):
-        """callback for 'import from' statement"""
-        self.imports.extend((node.module, n.name, n.asname, node.level)
-                            for n in node.names)
-        ast.NodeVisitor.generic_visit(self, node)
-
-def find_imports(file_path):
-    """get list of import from python module
-    :return: (list - tuple) (module, name, asname, level)
-    """
-    mod_ast = _file2ast(file_path)
-    finder = _ImportsFinder()
-    finder.visit(mod_ast)
-    return finder.imports
-
-
-############## process module imports
-
-class _PyModule(object):
-    """Represents a python module
-
-    :path: (str) path to module
-    :ivar: fqn (list - str) full qualified name as list of strings
-    """
-    def __init__(self, path):
-        self.path = path
-        self.fqn = self._get_fqn(path)
-
-    def __repr__(self): # pragma: no cover
-        return "<_PyModule %s>" % self.path
-
-    @staticmethod
-    def is_pkg(path):
-        """return True if path is a python package"""
-        return (os.path.isdir(path) and
-                os.path.exists(os.path.join(path, '__init__.py')))
-
-    @classmethod
-    def _get_fqn(cls, path):
-        """get full qualified name as list of strings
-        :return: (list - str) of path segments from top package to given path
-        """
-        name_list = []
-        current_path = os.path.basename(path)
-        if current_path.endswith('.py'):
-            current_path = current_path[:-3]
-        parent_path = os.path.dirname(path)
-        # move to parent path until parent path is a python package
-        while True:
-            name_list.append(current_path)
-            if not cls.is_pkg(parent_path):
-                break
-            current_path = os.path.basename(parent_path)
-            parent_path = os.path.dirname(parent_path)
-        name_list.reverse()
-        return name_list
-
-
-
-class ModuleSet(object):
-    """helper to filter import list only from within packages"""
-    def __init__(self, path_list):
-        self.pkgs = set() # str of fqn (dot separed)
-        self.by_path = {} # module by path
-        self.by_name = {} # module by name (dot separated)
-
-        for path in path_list:
-            # create modules object
-            mod = _PyModule(path)
-            if mod.fqn[-1] == '__init__':
-                self.pkgs.add('.'.join(mod.fqn[:-1]))
-            self.by_path[path] = mod
-            self.by_name['.'.join(mod.fqn)] = mod
-
-
-    def _get_imported_module(self, module_name, relative_guess=''):
-        """try to get imported module reference by its name"""
-        # if imported module on module_set add to list
-        imp_mod = self.by_name.get(module_name)
-        if imp_mod:
-            return imp_mod
-
-        # last part of import section might not be a module
-        # remove last section
-        no_obj = module_name.rsplit('.', 1)[0]
-        imp_mod2 = self.by_name.get(no_obj)
-        if imp_mod2:
-            return imp_mod2
-
-        # special case for __init__
-        if module_name in self.pkgs:
-            pkg_name = module_name  + ".__init__"
-            return self.by_name[pkg_name]
-
-        # when removing last section (obj), need to remove relative_guess to
-        # avoid importing its own package
-        no_rel_no_obj = no_obj[len(relative_guess):]
-        if no_rel_no_obj in self.pkgs:
-            pkg_name = no_rel_no_obj +  ".__init__"
-            return self.by_name[pkg_name]
-
-
-    def get_imports(self, module):
-        """return set of imported modules that are in self
-        :param module: _PyModule
-        :return: (set - str) of path names
-        """
-        # print('####', module.fqn)
-        # print(self.by_name.keys(), '\n\n')
-        imports = set()
-        raw_imports = find_imports(module.path)
-        for import_entry in raw_imports:
-            # join 'from' and 'import' part of import statement
-            full = ".".join(s for s in import_entry[:2] if s)
-
-            import_level = import_entry[3]
-            if import_level:
-                # intra package imports
-                intra = '.'.join(module.fqn[:-import_level] + [full])
-                imported = self._get_imported_module(intra)
-                if imported:
-                    imports.add(imported.path)
-
-            else:
-                # deal with old-style relative imports
-                for level in range(1, len(module.fqn)):
-                    module_pkg = '.'.join(module.fqn[:-level])
-                    full_relative = "%s.%s" % (module_pkg, full)
-                    imported = self._get_imported_module(full_relative, module_pkg)
-                    if imported:
-                        imports.add(imported.path)
-                        break
-                else:
-                    imported = self._get_imported_module(full)
-                    if imported:
-                        imports.add(imported.path)
-        return imports
 
 
 ######### Graph implementation
@@ -368,7 +207,7 @@ class PyTasks(object):
         :return dict: single value 'imports', value set of str file paths
         """
         mod = self.py_mods.by_path[module_path]
-        return {'imports': list(self.py_mods.get_imports(mod))}
+        return {'imports': list(str(s) for s in self.py_mods.get_imports(mod))}
 
 
     def action_write_json_deps(self, imports):
@@ -561,7 +400,7 @@ class IncrementalControl(object):
         for dirname, dirnames, filenames in os.walk(pkg_name):
             for subdirname in dirnames:
                 sub_path = os.path.join(dirname, subdirname)
-                if get_sub_folders or _PyModule.is_pkg(sub_path):
+                if get_sub_folders or PyModule.is_pkg(sub_path):
                     this_modules.extend(self._get_pkg_modules(sub_path))
         return this_modules
 

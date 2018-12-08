@@ -94,7 +94,7 @@ class TestTasks(object):
 
     def test_img_graph(self, cmd_run, rm_generated_deps):
         # dumb test just check task is created
-        IncrementalTasks(['xxx'], ['yyy'])
+        IncrementalTasks(['xxx.py'], ['yyy.py'])
         cmd_run.execute(cmd_run.params, ['dep-image'])
         got = cmd_run.outstream.getvalue().splitlines()
         assert '.  dep-image' in got

@@ -29,6 +29,7 @@ setup(name = 'pytest-incremental',
                      ],
       py_modules = ['pytest_incremental'],
       install_requires = [
+          'import_deps == 0.1.0',
           'doit == 0.31.1',
           'pytest >= 4.0.1',
       ],
