@@ -3,12 +3,11 @@
 Changes
 =======
 
-0.5.0 (*unreleased*)
+0.5.0 (*2018-12-09*)
 ====================
 
 - drop python 2 support
 - require doit==0.31, pytest==4.0
-
 
 
 0.4.2 (*2015-05-08*)

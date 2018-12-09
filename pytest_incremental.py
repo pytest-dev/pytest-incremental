@@ -3,7 +3,7 @@ pytest-incremental : an incremental test runner (pytest plugin)
 https://pypi.python.org/pypi/pytest-incremental
 
 The MIT License - see LICENSE file
-Copyright (c) 2011-2015 Eduardo Naufel Schettino
+Copyright (c) 2011-2018 Eduardo Naufel Schettino
 """
 
 __version__ = (0, 5, 0)

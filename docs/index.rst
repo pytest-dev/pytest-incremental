@@ -32,7 +32,7 @@ use it as a test runner.
 Install
 =========
 
-pytest-incremental is tested on python  2.7 - 3.3-3.4
+pytest-incremental is tested on python  3.5-3.7
 
 ``pip install pytest-incremental``
 
@@ -89,6 +89,4 @@ To generate an image::
 You can also check what are the outdated tests without executing them::
 
  $ py.test --inc-outdated
-
-
 
