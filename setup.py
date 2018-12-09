@@ -37,5 +37,11 @@ setup(name = 'pytest-incremental',
         'pytest11': ['pytest_incremental = pytest_incremental'],
         },
       long_description = README_TEXT,
+      keywords = "pytest unittest test",
+      project_urls = {
+          'Documentation': 'https://pytest-incremental.readthedocs.io',
+          'Source': 'https://github.com/pytest-dev/pytest-incremental',
+          'Tracker': 'https://github.com/pytest-dev/pytest-incremental/issues',
+      },
       )
 
