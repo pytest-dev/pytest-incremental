@@ -11,9 +11,14 @@ def get_results(recorder):
         when = getattr(result, 'when', None)
         if  when is None:
             continue
-        test_name = result.nodeid.split('::')[1]
+        test_name = result.nodeid.split('::')[-1]
         results[test_name, when] = result.outcome
     return results
+
+def count_calls(results):
+    """count number of "call" nodeid's in results"""
+    return len(list(r for r in results.keys() if r[1]=='call'))
+
 
 
 TEST_SAMPLE = """
@@ -110,12 +115,12 @@ def test_bar():
     rec = testdir.inline_run(*args)
     results = get_results(rec)
     assert results['test_foo', 'call'] == 'passed'
-    assert len(results) == 3
+    assert count_calls(results) == 1
 
     # second time not executed because up-to-date
     rec2 = testdir.inline_run(*args)
     results2 = get_results(rec2)
-    assert len(results2) == 0
+    assert count_calls(results2) == 0
     out = capsys.readouterr()[0].splitlines()
     assert '== 1 deselected' in out[-1]
 
@@ -131,7 +136,7 @@ def test_bar():
     print(rec3.getreports(), results3)
     assert results3['test_foo', 'call'] == 'passed'
     assert results3['test_bar', 'call'] == 'passed'
-    assert len(results3) == 6
+    assert count_calls(results3) == 2
 
 
 
@@ -160,7 +165,7 @@ def test_my_fail():
     # second time not executed because up-to-date
     rec2 = testdir.inline_run(*args)
     results2 = get_results(rec2)
-    assert len(results2) == 0
+    assert count_calls(results2) == 0
 
 
 def test_keyword_dont_save_success(testdir, capsys):
@@ -176,10 +181,10 @@ def test_keyword_dont_save_success(testdir, capsys):
 
 
 def test_xdist_not_supported(testdir, capsys):
-    from _pytest.main import EXIT_USAGEERROR
+    from _pytest.main import ExitCode
     test = testdir.makepyfile(TEST_SAMPLE)
     got = testdir.inline_run('--inc', '-n', '2', test)
-    assert got.ret == EXIT_USAGEERROR
+    assert got.ret == ExitCode.USAGE_ERROR
     err = capsys.readouterr()[1].splitlines()
     msg = 'ERROR: Plugin incremental is not compatible with plugin xdist.'
     assert msg in err
