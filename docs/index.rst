@@ -32,7 +32,7 @@ use it as a test runner.
 Install
 =========
 
-pytest-incremental is tested on python  3.5-3.7
+pytest-incremental is tested on python 3.6-3.9, pytest 6.x.
 
 ``pip install pytest-incremental``
 

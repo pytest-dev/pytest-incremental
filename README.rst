@@ -1,19 +1,17 @@
-================
-README
-================
+.. image:: https://img.shields.io/pypi/v/pytest-incremental.svg
+   :target: https://pypi.python.org/pypi/pytest-incremental
+
+.. image:: https://img.shields.io/pypi/pyversions/pytest-incremental.svg
+   :target: https://pypi.python.org/pypi/pytest-incremental
+
+.. image:: https://github.com/schettino72/pytest-incremental/workflows/test/badge.svg
+   :target: https://github.com/schettino72/pytest-incremental/actions?query=workflow%3Atest
 
 
 pytest-incremental
 ====================
 
 an incremental test runner (pytest plug-in)
-
-
-.. image:: https://travis-ci.org/pytest-dev/pytest-incremental.svg?branch=master
-  :target: https://travis-ci.org/pytest-dev/pytest-incremental
-
-.. image:: https://coveralls.io/repos/pytest-dev/pytest-incremental/badge.svg
-  :target: https://coveralls.io/r/pytest-dev/pytest-incremental
 
 *pytest-incremental* analyses your project structure and file
 modifications between test-runs
@@ -34,6 +32,6 @@ license
 =======
 
 The MIT License
-Copyright (c) 2015 Eduardo Naufel Schettino
+Copyright (c) 2015-2021 Eduardo Naufel Schettino
 
 see LICENSE file
