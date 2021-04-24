@@ -1,4 +1,5 @@
 's
+3Atest
 API
 AST
 BT
@@ -35,6 +36,7 @@ rankdir
 stdlib
 testmon
 toctree
+traceback
 unittest
 unittest's
 util

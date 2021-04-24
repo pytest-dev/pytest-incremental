@@ -4,8 +4,8 @@
 .. image:: https://img.shields.io/pypi/pyversions/pytest-incremental.svg
    :target: https://pypi.python.org/pypi/pytest-incremental
 
-.. image:: https://github.com/schettino72/pytest-incremental/workflows/test/badge.svg
-   :target: https://github.com/schettino72/pytest-incremental/actions?query=workflow%3Atest
+.. image:: https://github.com/pytest-dev/pytest-incremental/workflows/test/badge.svg
+   :target: https://github.com/pytest-dev/pytest-incremental/actions?query=workflow%3Atest
 
 
 pytest-incremental

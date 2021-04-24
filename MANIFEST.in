@@ -1,6 +1,6 @@
 include .coveragerc
+include .github/workflows/test.yml
 include .gitignore
-include .travis.yml
 include CHANGES
 include LICENSE
 include MANIFEST.in
