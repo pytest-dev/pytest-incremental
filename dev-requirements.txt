@@ -2,3 +2,4 @@ pytest-xdist
 pyflakes
 coverage
 doit-py
+git+https://github.com/schettino72/pytest-json-report@schettino72-fork#egg=pytest-json-report

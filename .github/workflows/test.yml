@@ -31,4 +31,7 @@ jobs:
         doit pyflakes
     - name: Test with pytest
       run: |
-        pytest
+        pytest --json-report --json-report-indent 4
+    - name: upload to testview
+      run: url -X POST https://testview.schettino72.net/api/projects/pytest-incremental/${{ github.sha }}/${{ github.run_number}}-${{ github.job }}-${{ matrix.python-version}} --header "Content-Type: application/json" -d "@.report.json"
+
