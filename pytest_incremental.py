@@ -2,6 +2,10 @@
 pytest-incremental : an incremental test runner (pytest plugin)
 https://pypi.python.org/pypi/pytest-incremental
 
+DEPRECATED: This project is no longer maintained.
+A replacement project is being developed at https://github.com/schettino72/rut
+The new project is built on unittest directly and is not a pytest plugin.
+
 The MIT License - see LICENSE file
 Copyright (c) 2011-2018 Eduardo Naufel Schettino
 """
@@ -11,6 +15,7 @@ __version__ = (0, 5, 0)
 import os
 import json
 import functools
+import warnings
 from collections import defaultdict
 from io import StringIO
 
@@ -21,6 +26,15 @@ from doit.cmd_run import Run
 from doit.reporter import ZeroReporter
 from doit import doit_cmd
 from doit.tools import config_changed
+
+
+# Issue deprecation warning when module is loaded
+warnings.warn(
+    "pytest-incremental is deprecated and no longer maintained. "
+    "Please consider using the replacement project at https://github.com/schettino72/rut",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 ######### Graph implementation

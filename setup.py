@@ -8,13 +8,13 @@ with open(os.path.join(os.path.dirname(__file__), 'README.rst'), 'r') as fp:
 
 
 setup(name = 'pytest-incremental',
-      description = 'an incremental test runner (pytest plugin)',
+      description = 'an incremental test runner (pytest plugin) [DEPRECATED - see https://github.com/schettino72/rut]',
       version = '0.6.0',
       license = 'MIT',
       author = 'Eduardo Naufel Schettino',
       author_email = 'schettino72@gmail.com',
       url = 'https://pytest-incremental.readthedocs.io',
-      classifiers = ['Development Status :: 5 - Production/Stable',
+      classifiers = ['Development Status :: 7 - Inactive',
                      'Environment :: Console',
                      'Intended Audience :: Developers',
                      'License :: OSI Approved :: MIT License',

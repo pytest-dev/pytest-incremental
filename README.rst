@@ -8,6 +8,14 @@
    :target: https://github.com/pytest-dev/pytest-incremental/actions?query=workflow%3Atest
 
 
+.. warning::
+
+   **DEPRECATED: This project is no longer maintained.**
+   
+   A replacement project is being developed at `schettino72/rut <https://github.com/schettino72/rut>`_.
+   The new project is built on unittest directly and is not a pytest plugin.
+
+
 pytest-incremental
 ====================
 

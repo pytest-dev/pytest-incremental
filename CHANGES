@@ -3,6 +3,14 @@
 Changes
 =======
 
+0.6.1 (*unreleased*)
+====================
+
+- **DEPRECATED**: This project is no longer maintained. A replacement project 
+  is being developed at https://github.com/schettino72/rut which is built on 
+  unittest directly and is not a pytest plugin.
+
+
 0.6.0 (*2021-04-25*)
 ====================
 

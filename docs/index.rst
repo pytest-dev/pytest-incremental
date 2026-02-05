@@ -7,6 +7,13 @@
 pytest-incremental: py.test plugin - incremental test runner
 ============================================================
 
+.. warning::
+
+   **DEPRECATED: This project is no longer maintained.**
+   
+   A replacement project is being developed at `schettino72/rut <https://github.com/schettino72/rut>`_.
+   The new project is built on unittest directly and is not a pytest plugin.
+
 
 Github:
     https://github.com/pytest-dev/pytest-incremental
