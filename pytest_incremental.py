@@ -10,7 +10,7 @@ The MIT License - see LICENSE file
 Copyright (c) 2011-2018 Eduardo Naufel Schettino
 """
 
-__version__ = (0, 5, 0)
+__version__ = (0, 6, 1)
 
 import os
 import json
